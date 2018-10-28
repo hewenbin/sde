@@ -80,33 +80,33 @@ def RandTri(a, b, c):
 
 # def Gamma(h, a):
 #   if (h > 4.76):
-#     return 0.;
-#   else:
-#     if (a < 0.):
-#       return -Gamma(h, -a)
-#     elif (a > 1.):
-#       return 0.5 * norm.cdf(h) + 0.5 * norm.cdf(a * h) - \
-#              norm.cdf(h) * norm.cdf(a * h) - Gamma(a * h, 1. / a)
+#     return 0.
 
-#     res = math.atan(a) / 2. / math.pi
-#     for j in range(Gammai):
-#       tmp = 0.
-#       for i in range(j + 1):
-#         tmp += pow(h, 2 * i) / pow(2., i) / muli[i]
+#   if (a < 0.):
+#     return -Gamma(h, -a)
+#   if (a > 1.):
+#     return .5 * NormCdf(h) + .5 * NormCdf(a * h) - \
+#            NormCdf(h) * NormCdf(a * h) - Gamma(a * h, 1. / a)
 
-#       res -= 0.5 / math.pi * pow(a, 2 * j + 1) * pow(-1., j) / (2. * j + 1.) * \
-#              (1. - math.exp(-0.5 * h * h) * tmp)
-#     return res
+#   res = math.atan(a) * .5 / math.pi
+#   for j in range(Gammai):
+#     tmp = 0.
+#     for i in range(j + 1):
+#       tmp += pow(h, 2 * i) / pow(2., i) / muli[i]
 
-gamma_table = np.fromfile("../gamma_table.raw", dtype = "float32")
+#     res -= .5 / math.pi * pow(a, 2 * j + 1) * pow(-1., j) / (2. * j + 1.) * \
+#            (1. - math.exp(-.5 * h * h) * tmp)
+#   return res
+
+gamma_table = np.fromfile("../gamma_table.raw", dtype="float32")
 gamma_table = gamma_table.reshape((477, 101))
 
 def Gamma(h, a):
   if (h > 4.76):
-    return 0.;
+    return 0.
 
   if (a < 0.):
-    return -T(h, -a)
+    return -Gamma(h, -a)
   if (a > 1.):
     return .5 * NormCdf(h) + .5 * NormCdf(a * h) - \
            NormCdf(h) * NormCdf(a * h) - Gamma(a * h, 1. / a)
