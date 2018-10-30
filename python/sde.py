@@ -187,8 +187,8 @@ for i in tqdm(range(xdim * ydim * zdim)):
   uaxis = uaxis / Length(uaxis)
   vaxis = Cross(uaxis, n)
 
-  udot_recip = np.dot(uaxis, uaxis)
-  vdot_recip = np.dot(vaxis, vaxis)
+  udot_recip = 1. / np.dot(uaxis, uaxis)
+  vdot_recip = 1. / np.dot(vaxis, vaxis)
 
   au = np.dot(a_proj, uaxis) * udot_recip
   av = np.dot(a_proj, vaxis) * vdot_recip
