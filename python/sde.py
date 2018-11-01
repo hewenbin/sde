@@ -22,33 +22,48 @@ kSqrt2 = math.sqrt(2.)
 kSqrt2Recip = 1. / kSqrt2
 kSqrt2PiRecip = 1. / math.sqrt(2. * math.pi)
 
+def Sub(a, b):
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+
+def MulScalar(a, s):
+  return [a[0] * s, a[1] * s, a[2] * s]
+
+def MulMat(a, m):
+  return [a[0] * m[0] + a[1] * m[1] + a[2] * m[2],
+          a[0] * m[3] + a[1] * m[4] + a[2] * m[5],
+          a[0] * m[6] + a[1] * m[7] + a[2] * m[8]]
+
+def Dot(a, b):
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
 def Cross(a, b):
-  return np.array([a[1] * b[2] - a[2] * b[1],
-                   a[2] * b[0] - a[0] * b[2],
-                   a[0] * b[1] - a[1] * b[0]], dtype="float32")
+  return [a[1] * b[2] - a[2] * b[1],
+          a[2] * b[0] - a[0] * b[2],
+          a[0] * b[1] - a[1] * b[0]]
 
 def Length(a):
   return math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
 
 def Normalize(a):
-  return a / Length(a)
+  l_recip = 1. / Length(a)
+  return [a[0] * l_recip, a[1] * l_recip, a[2] * l_recip]
 
 def TriangleArea(a, b, c):
-  ab, ac = b - a, c - a
+  ab, ac = Sub(b, a), Sub(c, a)
   return .5 * Length(Cross(ab, ac))
 
 def PlaneOfTriangle(a, b, c):
-  ab, ac = b - a, c - a
+  ab, ac = Sub(b, a), Sub(c, a)
   n = Normalize(Cross(ab, ac))
 
-  d = np.dot(n, a)
+  d = Dot(n, a)
   return n, d
 
 def ProjOnPlane(v, n, d):
-  return v - n * d
+  return Sub(v, MulScalar(n, d))
 
 def DistanceToPlane(v, n, d):
-  return np.dot(v, n) + d
+  return Dot(v, n) + d
 
 def Sign(ax, ay, bx, by, cx, cy):
   return (ax - cx) * (by - cy) - (bx - cx) * (ay - cy)
@@ -64,12 +79,6 @@ def NormPdf(x):
 
 def NormCdf(x):
   return .5 * (1. + math.erf(x * kSqrt2Recip))
-
-def RandTri(a, b, c):
-  r1, r2 = random.rand(), random.rand()
-  return (1. - math.sqrt(r1)) * a + \
-         (math.sqrt(r1) * (1. - r2)) * b + \
-         r2 * math.sqrt(r1) * c
 
 # Gammaj = 40
 # muli = [1]
@@ -98,7 +107,7 @@ def RandTri(a, b, c):
 #   return res
 
 gamma_table = np.fromfile("../gamma_table.raw", dtype="float32")
-gamma_table = gamma_table.reshape((477, 101))
+gamma_table = gamma_table.reshape((477, 101)).tolist()
 
 # import matplotlib.pyplot as plt
 
@@ -124,16 +133,16 @@ def Gamma(h, a):
   i, j = min(i, 475), min(j, 99)
 
   tx, ty = x - i, y - j
-  g0 = tx * gamma_table[i + 1, j] + (1. - tx) * gamma_table[i, j]
-  g1 = tx * gamma_table[i + 1, j + 1] + (1. - tx) * gamma_table[i, j + 1]
+  g0 = tx * gamma_table[i + 1][j] + (1. - tx) * gamma_table[i][j]
+  g1 = tx * gamma_table[i + 1][j + 1] + (1. - tx) * gamma_table[i][j + 1]
 
   return ty * g1 + (1. - ty) * g0
 # ------------------------------------------------------------------------------
 
 # input surfaces ---------------------------------------------------------------
-verts = np.array([-0.8, -0.3,  0.2,
-                   0.7, -0.9,  0.4,
-                   0.1,  0.8, -0.2], dtype="float32")
+verts = [[-.8, -.3,  .2],
+         [ .7, -.9,  .4],
+         [ .1,  .8, -.2]]
 # ------------------------------------------------------------------------------
 
 # parameters -------------------------------------------------------------------
@@ -141,41 +150,43 @@ xmin, ymin, zmin = -1., -1., -1.
 xmax, ymax, zmax = 1., 1., 1.  # Physical domain that density estimation is performed on.
 xdim, ydim, zdim = 65, 65, 65  # Grid resolution of the physical domain.
 
-H = np.zeros((3, 3), dtype="float32")
+H = np.zeros((3, 3))  # bandwidth matrix
 H[0, 0], H[0, 1], H[0, 2] = .0025,  0.,     0.
 H[1, 0], H[1, 1], H[1, 2] = 0.,     .0025,  0.
 H[2, 0], H[2, 1], H[2, 2] = 0.,     0.,     .0025
 # ------------------------------------------------------------------------------
 
 # SDE computation --------------------------------------------------------------
-a, b, c = verts[0:3], verts[3:6], verts[6:9]  # three vertices of the triangle
+a, b, c = verts[0], verts[1], verts[2]  # three vertices of the triangle
 area = TriangleArea(a, b, c)  # area of the triangle
 
-Hi = linalg.inv(H)
-Hi_sqrt = linalg.sqrtm(Hi)
-Hi_sqrt_det = linalg.det(Hi_sqrt)
+Hi = linalg.inv(H)  # inverse of the bandwidth matrix
+Hi_sqrt = linalg.sqrtm(Hi)  # square root of Hi (i.e., Hi_sqrt x Hi_sqrt = Hi)
+Hi_sqrt_det = float(linalg.det(Hi_sqrt))  # determinant of Hi_sqrt
+Hi_sqrt = Hi_sqrt.flatten().tolist()
 
 # Create a numpy array to store SDE.
-sde = np.zeros([zdim, ydim, xdim], dtype="float32")
+sde = np.zeros([zdim, ydim, xdim])
 
 # Compute SDE for each grid point.
-alpha = [0., 0., 0.]  # Used to store the bivariate normal integral over the area defined by each edge.
+alpha = [0., 0., 0.]  # Used to store the bivariate normal integral over
+                      # the area defined by each edge of the triangle.
 for i in tqdm(range(xdim * ydim * zdim)):
   # physical position of the grid point
   gk = math.floor(i / (xdim * ydim))
   gj = math.floor((i - gk * xdim * ydim) / xdim)
   gi = i % xdim
 
-  x = np.array([gi * (xmax - xmin) / (xdim - 1.) + xmin,
-                gj * (ymax - ymin) / (ydim - 1.) + ymin,
-                gk * (zmax - zmin) / (zdim - 1.) + zmin], dtype="float32")
+  x = [gi * (xmax - xmin) / (xdim - 1.) + xmin,
+       gj * (ymax - ymin) / (ydim - 1.) + ymin,
+       gk * (zmax - zmin) / (zdim - 1.) + zmin]
 
   # Transform the triangle based on the grid point position and the bandwidth matrix.
-  ax, bx, cx = x - a, x - b, x - c
+  ax, bx, cx = Sub(x, a), Sub(x, b), Sub(x, c)
 
-  a_prime = np.dot(Hi_sqrt, ax)
-  b_prime = np.dot(Hi_sqrt, bx)
-  c_prime = np.dot(Hi_sqrt, cx)
+  a_prime = MulMat(ax, Hi_sqrt)
+  b_prime = MulMat(bx, Hi_sqrt)
+  c_prime = MulMat(cx, Hi_sqrt)
 
   area_prime = TriangleArea(a_prime, b_prime, c_prime)
 
@@ -187,25 +198,19 @@ for i in tqdm(range(xdim * ydim * zdim)):
   b_proj = ProjOnPlane(b_prime, n, d)
   c_proj = ProjOnPlane(c_prime, n, d)
 
-  uaxis = a_proj - b_proj
-  uaxis = uaxis / Length(uaxis)
+  uaxis = Normalize(Sub(a_proj, b_proj))
   vaxis = Cross(uaxis, n)
 
-  udot_recip = 1. / np.dot(uaxis, uaxis)
-  vdot_recip = 1. / np.dot(vaxis, vaxis)
+  au = Dot(a_proj, uaxis)
+  av = Dot(a_proj, vaxis)
 
-  au = np.dot(a_proj, uaxis) * udot_recip
-  av = np.dot(a_proj, vaxis) * vdot_recip
+  bu = Dot(b_proj, uaxis)
+  bv = Dot(b_proj, vaxis)
 
-  bu = np.dot(b_proj, uaxis) * udot_recip
-  bv = np.dot(b_proj, vaxis) * vdot_recip
+  cu = Dot(c_proj, uaxis)
+  cv = Dot(c_proj, vaxis)
 
-  cu = np.dot(c_proj, uaxis) * udot_recip
-  cv = np.dot(c_proj, vaxis) * vdot_recip
-
-  lamb = DistanceToPlane(np.zeros(3, dtype="float32"), n, d)
-
-  # Compute SDE based on the bivariate normal integral.
+  # Compute SDE based on bivariate normal integral.
   if (au != 0. or av != 0.) and \
      (bu != 0. or bv != 0.) and \
      (cu != 0. or cv != 0.):
@@ -275,7 +280,7 @@ for i in tqdm(range(xdim * ydim * zdim)):
     # Combine alpha bc, ca, and ab.
     if (PointInTriangle(0., 0., au, av, bu, bv, cu, cv)):
       sde[gk, gj, gi] += (1. - alpha[0] - alpha[1] - alpha[2]) * \
-                         NormPdf(lamb) * ct
+                         NormPdf(d) * ct
     else:
       anglec = []
       la = math.sqrt(au * au + av * av)
@@ -299,13 +304,13 @@ for i in tqdm(range(xdim * ydim * zdim)):
 
       if (minaci == 0):
         sde[gk, gj, gi] += abs(alpha[1] + alpha[2] - alpha[0]) * \
-                           NormPdf(lamb) * ct
+                           NormPdf(d) * ct
       elif (minaci == 1):
         sde[gk, gj, gi] += abs(alpha[0] + alpha[2] - alpha[1]) * \
-                           NormPdf(lamb) * ct
+                           NormPdf(d) * ct
       elif (minaci == 2):
         sde[gk, gj, gi] += abs(alpha[0] + alpha[1] - alpha[2]) * \
-                           NormPdf(lamb) * ct
+                           NormPdf(d) * ct
 
   # Handle spacial cases.
   elif au == 0. and av == 0.:
@@ -336,7 +341,7 @@ for i in tqdm(range(xdim * ydim * zdim)):
     cun, cvn = cu / lc, cv / lc
 
     sde[gk, gj, gi] += abs(abs(math.acos(bun * cun + bvn * cvn)) / \
-                       math.pi * .5 - alpha[0]) * NormPdf(lamb) * ct
+                       math.pi * .5 - alpha[0]) * NormPdf(d) * ct
 
   elif bu == 0. and bv == 0.:
     # segment ca
@@ -366,7 +371,7 @@ for i in tqdm(range(xdim * ydim * zdim)):
     aun, avn = au / la, av / la
 
     sde[gk, gj, gi] += abs(abs(math.acos(cun * aun + cvn * avn)) / \
-                       math.pi * .5 - alpha[1]) * NormPdf(lamb) * ct
+                       math.pi * .5 - alpha[1]) * NormPdf(d) * ct
 
   elif cu == 0. and cv == 0.:
     # segment ab
@@ -396,7 +401,7 @@ for i in tqdm(range(xdim * ydim * zdim)):
     bun, bvn = bu / lb, bv / lb
 
     sde[gk, gj, gi] += abs(abs(math.acos(aun * bun + avn * bvn)) / \
-                       math.pi * .5 - alpha[2]) * NormPdf(lamb) * ct
+                       math.pi * .5 - alpha[2]) * NormPdf(d) * ct
 
 # Normalize SDE by the area of the surface.
 sde /= area
@@ -420,7 +425,7 @@ iren.SetRenderWindow(renWin)
 # Copy SDE into a vtkImage.
 reader = vtk.vtkImageImport()
 reader.CopyImportVoidPointer(sde, sde.nbytes)
-reader.SetDataScalarTypeToFloat()
+reader.SetDataScalarTypeToDouble()
 reader.SetDataExtent(0, xdim - 1, 0, ydim - 1, 0, zdim - 1)
 reader.SetWholeExtent(0, xdim - 1, 0, ydim - 1, 0, zdim - 1)
 # reader.SetDataOrigin(xmin, ymin, zmin)
@@ -484,8 +489,8 @@ outlineActor.GetProperty().SetLineWidth(2.)
 ren.AddActor(outlineActor)
 ren.AddVolume(volume)
 ren.SetBackground(.94, .94, .94)
-ren.GetActiveCamera().Azimuth(45)
-ren.GetActiveCamera().Elevation(30)
+ren.GetActiveCamera().Azimuth(45.)
+ren.GetActiveCamera().Elevation(30.)
 ren.ResetCameraClippingRange()
 ren.ResetCamera()
 
