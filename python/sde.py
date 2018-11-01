@@ -3,10 +3,10 @@
 # found in the LICENSE file.
 
 # This code includes a serial python implementation of our SDE computation
-# method. The use of this python implementation is to help users understand
-# the steps of the SDE computation method rather than to provide high
-# performance computation of SDE. To compute SDE for large number of surfaces
-# on high resolution grids, please use our parallel implementation based on
+# method. The use of this python implementation is to help users better
+# understand the details of the SDE computation method rather than to compute
+# SDE efficiently. To compute SDE for large number of surfaces on high
+# resolution grids, please use our parallel implementation based on
 # opengl/webgl.
 
 from __future__ import print_function
@@ -18,7 +18,6 @@ from scipy import random, linalg
 from tqdm import tqdm
 
 # constants and utility functions ----------------------------------------------
-kInf = 1e6
 kSqrt2 = math.sqrt(2.)
 kSqrt2Recip = 1. / kSqrt2
 kSqrt2PiRecip = 1. / math.sqrt(2. * math.pi)
@@ -31,23 +30,22 @@ def Cross(a, b):
 def Length(a):
   return math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
 
+def Normalize(a):
+  return a / Length(a)
+
 def TriangleArea(a, b, c):
   ab, ac = b - a, c - a
   return .5 * Length(Cross(ab, ac))
 
 def PlaneOfTriangle(a, b, c):
   ab, ac = b - a, c - a
-
-  n = Cross(ab, ac)
-  n = n / Length(n)
+  n = Normalize(Cross(ab, ac))
 
   d = np.dot(n, a)
   return n, d
 
-def ProjOnPlane(v, n):
-  s = np.dot(v, n) / np.dot(n, n)
-  nv = n * s
-  return v - nv
+def ProjOnPlane(v, n, d):
+  return v - n * d
 
 def DistanceToPlane(v, n, d):
   return np.dot(v, n) + d
@@ -73,12 +71,13 @@ def RandTri(a, b, c):
          (math.sqrt(r1) * (1. - r2)) * b + \
          r2 * math.sqrt(r1) * c
 
-# Gammai = 15
+# Gammaj = 40
 # muli = [1]
-# for i in range(1, Gammai):
+# for i in range(1, Gammaj):
 #   muli.append(muli[i - 1] * i)
 
 # def Gamma(h, a):
+#   h = abs(h)
 #   if (h > 4.76):
 #     return 0.
 
@@ -89,7 +88,7 @@ def RandTri(a, b, c):
 #            NormCdf(h) * NormCdf(a * h) - Gamma(a * h, 1. / a)
 
 #   res = math.atan(a) * .5 / math.pi
-#   for j in range(Gammai):
+#   for j in range(Gammaj):
 #     tmp = 0.
 #     for i in range(j + 1):
 #       tmp += pow(h, 2 * i) / pow(2., i) / muli[i]
@@ -101,7 +100,16 @@ def RandTri(a, b, c):
 gamma_table = np.fromfile("../gamma_table.raw", dtype="float32")
 gamma_table = gamma_table.reshape((477, 101))
 
+# import matplotlib.pyplot as plt
+
+# fig, ax = plt.subplots()
+# im = ax.imshow(gamma_table)
+# ax.invert_yaxis()
+# fig.colorbar(im, ax=ax)
+# plt.show()
+
 def Gamma(h, a):
+  h = abs(h)
   if (h > 4.76):
     return 0.
 
@@ -113,11 +121,7 @@ def Gamma(h, a):
 
   x, y = h * 100., a * 100.
   i, j = int(x), int(y)
-
-  if i >= 476:
-    i = 475
-  if j >= 100:
-    j = 99
+  i, j = min(i, 475), min(j, 99)
 
   tx, ty = x - i, y - j
   g0 = tx * gamma_table[i + 1, j] + (1. - tx) * gamma_table[i, j]
@@ -179,9 +183,9 @@ for i in tqdm(range(xdim * ydim * zdim)):
 
   # Map the triangle into 2D.
   n, d = PlaneOfTriangle(a_prime, b_prime, c_prime)
-  a_proj = ProjOnPlane(a_prime, n)
-  b_proj = ProjOnPlane(b_prime, n)
-  c_proj = ProjOnPlane(c_prime, n)
+  a_proj = ProjOnPlane(a_prime, n, d)
+  b_proj = ProjOnPlane(b_prime, n, d)
+  c_proj = ProjOnPlane(c_prime, n, d)
 
   uaxis = a_proj - b_proj
   uaxis = uaxis / Length(uaxis)
