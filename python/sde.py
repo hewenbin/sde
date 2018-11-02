@@ -169,8 +169,6 @@ Hi_sqrt = Hi_sqrt.flatten().tolist()
 sde = np.zeros([zdim, ydim, xdim])
 
 # Compute SDE for each grid point.
-alpha = [0., 0., 0.]  # Used to store the bivariate normal integral over
-                      # the area defined by each edge of the triangle.
 for i in tqdm(range(xdim * ydim * zdim)):
   # physical position of the grid point
   gk = math.floor(i / (xdim * ydim))
@@ -211,196 +209,124 @@ for i in tqdm(range(xdim * ydim * zdim)):
   cv = Dot(c_proj, vaxis)
 
   # Compute SDE based on bivariate normal integral.
+  alpha = [0., 0., 0.]  # Used to store the bivariate normal integral over
+                        # the area defined by each edge of the triangle.
   if (au != 0. or av != 0.) and \
      (bu != 0. or bv != 0.) and \
      (cu != 0. or cv != 0.):
     # segment bc
-    cbu, cbv = cu - bu, cv - bv
-    ad = abs(bu * cv - bv * cu)
-    h = ad / math.sqrt(cbu * cbu + cbv * cbv)
-    if (ad > 0.):
-      a1 = abs(bu * cbu + bv * cbv) / ad
-      a2 = abs(cu * cbu + cv * cbv) / ad
+    bcu, bcv = cu - bu, cv - bv
+    bxc = bu * cv - bv * cu
+    h = bxc / math.sqrt(bcu * bcu + bcv * bcv)
+    if (bxc != 0.):
+      a1 = (bu * bcu + bv * bcv) / bxc
+      a2 = (cu * bcu + cv * bcv) / bxc
+      alpha[0] = abs(Gamma(h, a1) - Gamma(h, a2))
     else:
-      a1 = kInf
-      a2 = kInf
-
-    dot1 = -bu * cbu - bv * cbv
-    dot2 = cu * cbu + cv * cbv
-    if dot1 < 0. or dot2 < 0.:
-      if (a2 > a1):
-        alpha[0] = Gamma(h, a2) - Gamma(h, a1)
-      else:
-        alpha[0] = Gamma(h, a1) - Gamma(h, a2)
-    else:
-      alpha[0] = Gamma(h, a1) + Gamma(h, a2)
+      alpha[0] = .5 if bu * cu + bv * cv < 0. else 0.
 
     # segment ca
-    acu, acv = au - cu, av - cv
-    ad = abs(cu * av - cv * au)
-    h = ad / math.sqrt(acu * acu + acv * acv)
-    if (ad > 0.):
-      a1 = abs(cu * acu + cv * acv) / ad
-      a2 = abs(au * acu + av * acv) / ad
+    cau, cav = au - cu, av - cv
+    cxa = cu * av - cv * au
+    h = cxa / math.sqrt(cau * cau + cav * cav)
+    if (cxa != 0.):
+      a1 = (cu * cau + cv * cav) / cxa
+      a2 = (au * cau + av * cav) / cxa
+      alpha[1] = abs(Gamma(h, a1) - Gamma(h, a2))
     else:
-      a1 = kInf
-      a2 = kInf
-
-    dot1 = -cu * acu - cv * acv
-    dot2 = au * acu + av * acv
-    if dot1 < 0. or dot2 < 0.:
-      if (a2 > a1):
-        alpha[1] = Gamma(h, a2) - Gamma(h, a1)
-      else:
-        alpha[1] = Gamma(h, a1) - Gamma(h, a2)
-    else:
-      alpha[1] = Gamma(h, a1) + Gamma(h, a2)
+      alpha[1] = .5 if cu * au + cv * av < 0. else 0.
 
     # segment ab
-    bau, bav = bu - au, bv - av
-    ad = abs(au * bv - av * bu)
-    h = ad / math.sqrt(bau * bau + bav * bav)
-    if (ad > 0.):
-      a1 = abs(au * bau + av * bav) / ad
-      a2 = abs(bu * bau + bv * bav) / ad
+    abu, abv = bu - au, bv - av
+    axb = au * bv - av * bu
+    h = axb / math.sqrt(abu * abu + abv * abv)
+    if (axb != 0.):
+      a1 = (au * abu + av * abv) / axb
+      a2 = (bu * abu + bv * abv) / axb
+      alpha[2] = abs(Gamma(h, a1) - Gamma(h, a2))
     else:
-      a1 = kInf
-      a2 = kInf
-
-    dot1 = -au * bau - av * bav
-    dot2 = bu * bau + bv * bav
-    if dot1 < 0. or dot2 < 0.:
-      if (a2 > a1):
-        alpha[2] = Gamma(h, a2) - Gamma(h, a1)
-      else:
-        alpha[2] = Gamma(h, a1) - Gamma(h, a2)
-    else:
-      alpha[2] = Gamma(h, a1) + Gamma(h, a2)
+      alpha[2] = .5 if au * bu + av * bv < 0. else 0.
 
     # Combine alpha bc, ca, and ab.
     if (PointInTriangle(0., 0., au, av, bu, bv, cu, cv)):
-      sde[gk, gj, gi] += (1. - alpha[0] - alpha[1] - alpha[2]) * \
-                         NormPdf(d) * ct
+      sde[gk, gj, gi] = (1. - alpha[0] - alpha[1] - alpha[2]) * \
+                        NormPdf(d) * ct
     else:
-      anglec = []
+      coss = [0., 0., 0.]
       la = math.sqrt(au * au + av * av)
       lb = math.sqrt(bu * bu + bv * bv)
       lc = math.sqrt(cu * cu + cv * cv)
       aun, avn = au / la, av / la
       bun, bvn = bu / lb, bv / lb
       cun, cvn = cu / lc, cv / lc
-      anglec.append((bun * cun + bvn * cvn))
-      anglec.append((cun * aun + cvn * avn))
-      anglec.append((aun * bun + avn * bvn))
+      coss[0] = bun * cun + bvn * cvn
+      coss[1] = cun * aun + cvn * avn
+      coss[2] = aun * bun + avn * bvn
 
-      minac = anglec[0]
-      minaci = 0
-      if anglec[1] < minac:
-        minac = anglec[1]
-        minaci = 1
-      if anglec[2] < minac:
-        minac = anglec[2]
-        minaci = 2
+      minid = coss.index(min(coss))
 
-      if (minaci == 0):
-        sde[gk, gj, gi] += abs(alpha[1] + alpha[2] - alpha[0]) * \
-                           NormPdf(d) * ct
-      elif (minaci == 1):
-        sde[gk, gj, gi] += abs(alpha[0] + alpha[2] - alpha[1]) * \
-                           NormPdf(d) * ct
-      elif (minaci == 2):
-        sde[gk, gj, gi] += abs(alpha[0] + alpha[1] - alpha[2]) * \
-                           NormPdf(d) * ct
+      sde[gk, gj, gi] = abs(alpha[0] + alpha[1] + alpha[2] - 2. * alpha[minid]) * \
+                        NormPdf(d) * ct
 
   # Handle spacial cases.
   elif au == 0. and av == 0.:
     # segment bc
-    cbu, cbv = cu - bu, cv - bv
-    ad = abs(bu * cv - bv * cu)
-    h = ad / math.sqrt(cbu * cbu + cbv * cbv)
-    if (ad > 0.):
-      a1 = abs(bu * cbu + bv * cbv) / ad
-      a2 = abs(cu * cbu + cv * cbv) / ad
+    bcu, bcv = cu - bu, cv - bv
+    bxc = bu * cv - bv * cu
+    h = bxc / math.sqrt(bcu * bcu + bcv * bcv)
+    if (bxc != 0.):
+      a1 = (bu * bcu + bv * bcv) / bxc
+      a2 = (cu * bcu + cv * bcv) / bxc
+      alpha[0] = abs(Gamma(h, a1) - Gamma(h, a2))
     else:
-      a1 = kInf
-      a2 = kInf
-
-    dot1 = -bu * cbu - bv * cbv
-    dot2 = cu * cbu + cv * cbv
-    if dot1 < 0. or dot2 < 0.:
-      if (a2 > a1):
-        alpha[0] = Gamma(h, a2) - Gamma(h, a1)
-      else:
-        alpha[0] = Gamma(h, a1) - Gamma(h, a2)
-    else:
-      alpha[0] = Gamma(h, a1) + Gamma(h, a2)
+      alpha[0] = .5 if bu * cu + bv * cv < 0. else 0.
 
     lb = math.sqrt(bu * bu + bv * bv)
     lc = math.sqrt(cu * cu + cv * cv)
     bun, bvn = bu / lb, bv / lb
     cun, cvn = cu / lc, cv / lc
 
-    sde[gk, gj, gi] += abs(abs(math.acos(bun * cun + bvn * cvn)) / \
+    sde[gk, gj, gi] = (math.acos(bun * cun + bvn * cvn) / \
                        math.pi * .5 - alpha[0]) * NormPdf(d) * ct
 
   elif bu == 0. and bv == 0.:
     # segment ca
-    acu, acv = au - cu, av - cv
-    ad = abs(cu * av - cv * au)
-    h = ad / math.sqrt(acu * acu + acv * acv)
-    if (ad > 0.):
-      a1 = abs(cu * acu + cv * acv) / ad
-      a2 = abs(au * acu + av * acv) / ad
+    cau, cav = au - cu, av - cv
+    cxa = cu * av - cv * au
+    h = cxa / math.sqrt(cau * cau + cav * cav)
+    if (cxa != 0.):
+      a1 = (cu * cau + cv * cav) / cxa
+      a2 = (au * cau + av * cav) / cxa
+      alpha[1] = abs(Gamma(h, a1) - Gamma(h, a2))
     else:
-      a1 = kInf
-      a2 = kInf
-
-    dot1 = -cu * acu - cv * acv
-    dot2 = au * acu + av * acv
-    if dot1 < 0. or dot2 < 0.:
-      if (a2 > a1):
-        alpha[1] = Gamma(h, a2) - Gamma(h, a1)
-      else:
-        alpha[1] = Gamma(h, a1) - Gamma(h, a2)
-    else:
-      alpha[1] = Gamma(h, a1) + Gamma(h, a2)
+      alpha[1] = .5 if cu * au + cv * av < 0. else 0.
 
     lc = math.sqrt(cu * cu + cv * cv)
     la = math.sqrt(au * au + av * av)
     cun, cvn = cu / lc, cv / lc
     aun, avn = au / la, av / la
 
-    sde[gk, gj, gi] += abs(abs(math.acos(cun * aun + cvn * avn)) / \
+    sde[gk, gj, gi] = (math.acos(cun * aun + cvn * avn) / \
                        math.pi * .5 - alpha[1]) * NormPdf(d) * ct
 
   elif cu == 0. and cv == 0.:
     # segment ab
-    bau, bav = bu - au, bv - av
-    ad = abs(au * bv - av * bu)
-    h = ad / math.sqrt(bau * bau + bav * bav)
-    if (ad > 0.):
-      a1 = abs(au * bau + av * bav) / ad
-      a2 = abs(bu * bau + bv * bav) / ad
+    abu, abv = bu - au, bv - av
+    axb = au * bv - av * bu
+    h = axb / math.sqrt(abu * abu + abv * abv)
+    if (axb != 0.):
+      a1 = (au * abu + av * abv) / axb
+      a2 = (bu * abu + bv * abv) / axb
+      alpha[2] = abs(Gamma(h, a1) - Gamma(h, a2))
     else:
-      a1 = kInf
-      a2 = kInf
-
-    dot1 = -au * bau - av * bav
-    dot2 = bu * bau + bv * bav
-    if dot1 < 0. or dot2 < 0.:
-      if (a2 > a1):
-        alpha[2] = Gamma(h, a2) - Gamma(h, a1)
-      else:
-        alpha[2] = Gamma(h, a1) - Gamma(h, a2)
-    else:
-      alpha[2] = Gamma(h, a1) + Gamma(h, a2)
+      alpha[2] = .5 if au * bu + av * bv < 0. else 0.
 
     la = math.sqrt(au * au + av * av)
     lb = math.sqrt(bu * bu + bv * bv)
     aun, avn = au / la, av / la
     bun, bvn = bu / lb, bv / lb
 
-    sde[gk, gj, gi] += abs(abs(math.acos(aun * bun + avn * bvn)) / \
+    sde[gk, gj, gi] = (math.acos(aun * bun + avn * bvn) / \
                        math.pi * .5 - alpha[2]) * NormPdf(d) * ct
 
 # Normalize SDE by the area of the surface.
