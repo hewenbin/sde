@@ -1,161 +1,44 @@
 <!DOCTYPE html>
-<html>
-  <head></head>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=0">
+    <title>Surface Density Estimation and Visualization</title>
+  </head>
 
-  <body onload="main()"></body>
+  <body onload="main()">
+    <script src="../sde.js"></script>
 
-  <script>
-    // utility functions
-    function GetShader(gl, type, code) {
-      var shader = gl.createShader(type);
+    <script>
+      // main function
+      function main() {
+        // input surfaces
+        var verts = [[-.8, -.3,  .2],
+                     [ .7, -.9,  .4],
+                     [ .1,  .8, -.2]];
 
-      gl.shaderSource(shader, code);
-      gl.compileShader(shader);
+        // parameters
+        var xmin = -1., ymin = -1., zmin = -1.,
+            xmax = 1., ymax = 1., zmax = 1.;  // Physical domain that density estimation is performed on.
+        var xdim = 64, ydim = 64, zdim = 64;  // Grid resolution of the physical domain.
 
-      if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === false) {
-        console.error("Shader couldn\'t compile.");
+        var H = [[.0025,  0.,     0.   ],
+                 [0.,     .0025,  0.   ],
+                 [0.,     0.,     .0025]];  // bandwidth matrix
+
+        // SDE computation -----------------------------------------------------
+        var sdestimator = new SDEstimator(verts);
+
+        var sde = sdestimator.Compute(xmin, ymin, zmin,
+                                      xmax, ymax, zmax,
+                                      xdim, ydim, zdim,
+                                      H);
+        // ---------------------------------------------------------------------
+
+        // SDE visualization ---------------------------------------------------
+        // ---------------------------------------------------------------------
       }
-
-      if (gl.getShaderInfoLog(shader) !== "") {
-        console.warn(type === gl.VERTEX_SHADER ? "Vertex:" : "Fragment:",
-                     gl.getShaderInfoLog(shader));
-      }
-
-      return shader;
-    }
-
-    // main function
-    function main() {
-      // canvas and gl
-      var canvas = document.createElement("canvas");
-
-      var gl = canvas.getContext("webgl2");
-      if (!gl) {
-        alert("WebGL2 is not supported by this browser.");
-        return;
-      }
-
-      var ext = gl.getExtension("EXT_color_buffer_float");
-      if (!ext) {
-        alert("EXT_color_buffer_float is not supported by this browser.");
-        return;
-      }
-
-      // input surface
-      var verts = new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]);
-
-      // parameters
-      var xmin = -1, ymin = -1, zmin = -1,
-          xmax = 1, ymax = 1, zmax = 1;  // Physical domain that density estimation is performed on.
-      var xdim = 64, ydim = 64, zdim = 64;  // Grid resolution of the physical domain.
-
-      var bandwidth = 0.1;  // Bandwidth of the density estimation kernel, which is isotropic for the time being.
-
-      // SDE computation -------------------------------------------------------
-      // Copy the input surface into a texture.
-      var nverts = verts.length / 3;
-      var ntris = verts.length / 9;
-      console.log("Number of triangles: " + ntris);
-
-      var verts_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, verts_texture);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, 9, ntris);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 9, ntris,
-                       gl.RED, gl.FLOAT, verts);
-
-      gl.bindTexture(gl.TEXTURE_2D, null);
-
-      // Create a 3D texture to store the density estimation result.
-      var sde_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_3D, sde_texture);
-      gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32F, xdim, ydim, zdim);
-
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-      gl.bindTexture(gl.TEXTURE_3D, null);
-
-      // Create a framebuffer.
-      var fbo = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.framebufferTextureLayer(
-          gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, sde_texture, 0, 0);
-
-      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !=
-          gl.FRAMEBUFFER_COMPLETE) {
-        alert("The framebuffer is not complete.")
-      }
-
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-      // Setup viewport.
-      gl.viewport(0, 0, xdim, ydim);
-
-      // Create shaders.
-      var vertex_glsl = [
-        "#version 300 es",
-        "in vec2 aPos;",
-        "in vec2 aTexCoord;",
-        "out vec2 vTexCoord;",
-        "void main() {",
-          "gl_Position = vec4(aPos, 0., 1.);",
-          "vTexCoord = aTexCoord;",
-        "}"
-      ].join("\n");
-
-      var fragment_glsl = [
-        "#version 300 es",
-        "precision highp float;",
-        "in vec2 vTexCoord;",
-        "out vec4 fragColor;",
-        "void main() {",
-          "fragColor = vec4(floor(vTexCoord.y * 64.0), 0, 0, 1);",
-        "}"
-      ].join("\n");
-
-      var program = gl.createProgram();
-      gl.attachShader(
-          program, GetShader(gl, gl.VERTEX_SHADER, vertex_glsl));
-      gl.attachShader(
-          program, GetShader(gl, gl.FRAGMENT_SHADER, fragment_glsl));
-
-      gl.linkProgram(program);
-      gl.useProgram(program);
-
-      var aPosLoc = gl.getAttribLocation(program, "aPos");
-      var aTexCoordLoc = gl.getAttribLocation(program, "aTexCoord");
-
-      gl.enableVertexAttribArray(aPosLoc);
-      gl.enableVertexAttribArray(aTexCoordLoc);
-
-      var quad = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0,
-                                   -1, 1, 0, 1, 1, 1, 1, 1]);
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-      gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, gl.FALSE, 16, 0);
-      gl.vertexAttribPointer(aTexCoordLoc, 2, gl.FLOAT, gl.FALSE, 16, 8);
-
-      // computation
-      gl.useProgram(program);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-      // Transfers density estimation result from GPU to CPU.
-      var result = new Float32Array(xdim * ydim * 4);
-      gl.readBuffer(gl.COLOR_ATTACHMENT0);
-      gl.readPixels(0, 0, xdim, ydim, gl.RGBA, gl.FLOAT, result);
-      // -----------------------------------------------------------------------
-
-      // SDE visualization -----------------------------------------------------
-      // -----------------------------------------------------------------------
-    }
-  </script>
+    </script>
+  </body>
 </html>

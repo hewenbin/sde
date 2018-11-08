@@ -3,32 +3,16 @@
 // found in the LICENSE file.
 
 function SDEstimator(verts) {
-  // static variables and functions --------------------------------------------
-  // canvas and gl
-  SDEstimator.canvas = document.createElement("canvas");
-
-  SDEstimator.gl = SDEstimator.canvas.getContext("webgl2");
-  if (!SDEstimator.gl) {
-    alert("WebGL2 is not supported by this browser.");
-    return;
-  }
-
-  SDEstimator.ext = SDEstimator.gl.getExtension("EXT_color_buffer_float");
-  if (!SDEstimator.ext) {
-    alert("EXT_color_buffer_float is not supported by this browser.");
-    return;
-  }
-  // ---------------------------------------------------------------------------
-
   // public variables and functions --------------------------------------------
   // set surfaces
   this.nverts = 0;
   this.area = 0.;
   this.verts_textures = [];
 
-  // local references of canvas and gl
+  // local references of canvas, gl, and program
   var canvas_ = SDEstimator.canvas,
-      gl_ = SDEstimator.gl;
+      gl_ = SDEstimator.gl,
+      program_ = SDEstimator.program;
 
   this.SetSurfaces = function(verts) {
     // reset surfaces
@@ -103,6 +87,80 @@ function SDEstimator(verts) {
       return;
     }
     Hi_sqrt = new Float32Array(Hi_sqrt.flat());
+
+    // Create a 3D texture to store the density estimation result.
+    var sde_texture = gl_.createTexture();
+    gl_.bindTexture(gl_.TEXTURE_3D, sde_texture);
+    gl_.texStorage3D(gl_.TEXTURE_3D, 1, gl_.R32F, xdim, ydim, zdim);
+
+    gl_.texParameteri(gl_.TEXTURE_3D, gl_.TEXTURE_MIN_FILTER, gl_.NEAREST);
+    gl_.texParameteri(gl_.TEXTURE_3D, gl_.TEXTURE_MAG_FILTER, gl_.NEAREST);
+    gl_.texParameteri(gl_.TEXTURE_3D, gl_.TEXTURE_WRAP_S, gl_.CLAMP_TO_EDGE);
+    gl_.texParameteri(gl_.TEXTURE_3D, gl_.TEXTURE_WRAP_T, gl_.CLAMP_TO_EDGE);
+
+    gl_.bindTexture(gl_.TEXTURE_3D, null);
+
+    // Create a framebuffer.
+    var fbo = gl_.createFramebuffer();
+    gl_.bindFramebuffer(gl_.FRAMEBUFFER, fbo);
+    gl_.framebufferTextureLayer(
+        gl_.FRAMEBUFFER, gl_.COLOR_ATTACHMENT0, sde_texture, 0, 0);
+
+    if (gl_.checkFramebufferStatus(gl_.FRAMEBUFFER) !=
+        gl_.FRAMEBUFFER_COMPLETE) {
+      alert("The framebuffer is not complete.");
+      return;
+    }
+
+    gl_.bindFramebuffer(gl_.FRAMEBUFFER, null);
+
+    // setup viewport
+    gl_.viewport(0, 0, xdim, ydim);
+
+    // computation
+    gl_.useProgram(program_);
+
+    var aPosLoc = gl_.getAttribLocation(program_, "aPos");
+    var aUvLoc = gl_.getAttribLocation(program_, "aUv");
+
+    gl_.enableVertexAttribArray(aPosLoc);
+    gl_.enableVertexAttribArray(aUvLoc);
+
+    var quad = new Float32Array([-1., -1., 0., 0., 1., -1., 1., 0.,
+                                 -1., 1., 0., 1., 1., 1., 1., 1.]);
+    var vbo = gl_.createBuffer();
+    gl_.bindBuffer(gl_.ARRAY_BUFFER, vbo);
+    gl_.bufferData(gl_.ARRAY_BUFFER, quad, gl_.STATIC_DRAW);
+    gl_.vertexAttribPointer(aPosLoc, 2, gl_.FLOAT, gl_.FALSE, 16, 0);
+    gl_.vertexAttribPointer(aUvLoc, 2, gl_.FLOAT, gl_.FALSE, 16, 8);
+
+    var res = new Float32Array(zdim * ydim * xdim * 4);
+    gl_.bindFramebuffer(gl_.FRAMEBUFFER, fbo);
+    for (var i = 0; i < zdim; ++i) {
+      gl_.framebufferTextureLayer(
+          gl_.FRAMEBUFFER, gl_.COLOR_ATTACHMENT0, sde_texture, 0, i);
+      gl_.drawArrays(gl_.TRIANGLE_STRIP, 0, 4);
+
+      // Copy the density estimation result from GPU to CPU.
+      gl_.readBuffer(gl_.COLOR_ATTACHMENT0);
+      gl_.readPixels(0, 0, xdim, ydim, gl_.RGBA, gl_.FLOAT,
+                     res, i * ydim * xdim * 4);
+    }
+
+    // Release buffers and textures
+    gl_.bindFramebuffer(gl_.FRAMEBUFFER, null);
+    gl_.bindBuffer(gl_.ARRAY_BUFFER, null);
+    gl_.useProgram(null);
+
+    gl_.deleteBuffer(vbo);
+    gl_.deleteFramebuffer(fbo);
+    gl_.deleteTexture(sde_texture);
+
+    // Normalize SDE by the area of the surface.
+    for (var i = 0, il = zdim * ydim * xdim * 4; i < il; i += 4)
+      res[i] /= this.area;
+
+    return res;
   };
   // ---------------------------------------------------------------------------
 
@@ -299,3 +357,77 @@ function SDEstimator(verts) {
   }
   // ---------------------------------------------------------------------------
 }
+
+// static variables and functions ----------------------------------------------
+// canvas and gl
+SDEstimator.canvas = document.createElement("canvas");
+
+SDEstimator.gl = SDEstimator.canvas.getContext("webgl2");
+if (!SDEstimator.gl) {
+  alert("WebGL2 is not supported by this browser.");
+}
+
+SDEstimator.ext = SDEstimator.gl.getExtension("EXT_color_buffer_float");
+if (!SDEstimator.ext) {
+  alert("EXT_color_buffer_float is not supported by this browser.");
+}
+
+// shaders
+SDEstimator.vertex_glsl = [
+  "#version 300 es",
+  "precision highp float;",
+  "in vec2 aPos;",
+  "in vec2 aUv;",
+  "out vec2 vUv;",
+  "void main() {",
+    "gl_Position = vec4(aPos, 0., 1.);",
+    "vUv = aUv;",
+  "}"
+].join("\n");
+
+SDEstimator.fragment_glsl = [
+  "#version 300 es",
+  "precision highp float;",
+  "in vec2 vUv;",
+  "out vec4 fragColor;",
+  "void main() {",
+    "fragColor = vec4(vUv.y * 64., 0., 0., 1.);",
+  "}"
+].join("\n");
+
+SDEstimator.GetShader = function(gl, type, code) {
+  var shader = gl.createShader(type);
+
+  gl.shaderSource(shader, code);
+  gl.compileShader(shader);
+
+  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === false) {
+    console.error("Shader couldn\'t compile.");
+  }
+
+  if (gl.getShaderInfoLog(shader) !== "") {
+    console.warn(type === gl.VERTEX_SHADER ? "Vertex:" : "Fragment:",
+                 gl.getShaderInfoLog(shader));
+  }
+
+  return shader;
+}
+
+SDEstimator.program = SDEstimator.gl.createProgram();
+
+SDEstimator.gl.attachShader(
+    SDEstimator.program,
+    SDEstimator.GetShader(
+        SDEstimator.gl,
+        SDEstimator.gl.VERTEX_SHADER,
+        SDEstimator.vertex_glsl));
+
+SDEstimator.gl.attachShader(
+    SDEstimator.program,
+    SDEstimator.GetShader(
+        SDEstimator.gl,
+        SDEstimator.gl.FRAGMENT_SHADER,
+        SDEstimator.fragment_glsl));
+
+SDEstimator.gl.linkProgram(SDEstimator.program);
+// ---------------------------------------------------------------------------
