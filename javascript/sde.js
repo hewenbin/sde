@@ -3,7 +3,88 @@
 // found in the LICENSE file.
 
 function SDEstimator(verts) {
-  this.verts = verts !== undefined ? verts : [];
+  // static variables and functions --------------------------------------------
+  // canvas and gl
+  SDEstimator.canvas = document.createElement("canvas");
+
+  SDEstimator.gl = SDEstimator.canvas.getContext("webgl2");
+  if (!SDEstimator.gl) {
+    alert("WebGL2 is not supported by this browser.");
+    return;
+  }
+
+  SDEstimator.ext = SDEstimator.gl.getExtension("EXT_color_buffer_float");
+  if (!SDEstimator.ext) {
+    alert("EXT_color_buffer_float is not supported by this browser.");
+    return;
+  }
+  // ---------------------------------------------------------------------------
+
+  // public variables and functions --------------------------------------------
+  // set surfaces
+  this.nverts = 0;
+  this.area = 0.;
+  this.verts_textures = [];
+
+  // local references of canvas and gl
+  var canvas_ = SDEstimator.canvas,
+      gl_ = SDEstimator.gl;
+
+  this.SetSurfaces = function(verts) {
+    // reset surfaces
+    this.nverts = 0;
+    this.area = 0.;
+    for (var i = 0, il = this.verts_textures.length; i < il; ++i)
+      gl_.deleteTexture(this.verts_textures[i]);
+    this.verts_textures.length = 0;
+
+    // Only keep triangles whose areas are greater than zero.
+    var valid_verts = [];
+    if (verts !== undefined) {
+      for (var i = 0, il = verts.length; i < il; i += 3) {
+        var area = TriangleArea(verts[i], verts[i + 1], verts[i + 2]);
+        if (area > 0.) {
+          valid_verts.push(verts[i].slice());
+          valid_verts.push(verts[i + 1].slice());
+          valid_verts.push(verts[i + 2].slice());
+          this.area += area;
+        }
+      }
+    }
+
+    this.nverts = valid_verts.length;
+    console.log("Number of valid triangles: " + this.nverts / 3);
+    console.log("Total area: " + this.area);
+
+    // Copy the surfaces into textures.
+    var max_texture_size = gl_.getParameter(gl_.MAX_TEXTURE_SIZE);
+    // console.log("WebGL2 maximum texture size: " +
+    //             max_texture_size + " x " + max_texture_size);
+    while (valid_verts.length > 0) {
+      var curr_verts = valid_verts.splice(0, Math.min(valid_verts.length,
+                                                      max_texture_size * 3));
+
+      var texture = gl_.createTexture();
+      gl_.bindTexture(gl_.TEXTURE_2D, texture);
+      gl_.texStorage2D(gl_.TEXTURE_2D, 1, gl_.RGB32F, 3, curr_verts.length / 3);
+
+      gl_.texParameteri(gl_.TEXTURE_2D, gl_.TEXTURE_MIN_FILTER, gl_.NEAREST);
+      gl_.texParameteri(gl_.TEXTURE_2D, gl_.TEXTURE_MAG_FILTER, gl_.NEAREST);
+      gl_.texParameteri(gl_.TEXTURE_2D, gl_.TEXTURE_WRAP_S, gl_.CLAMP_TO_EDGE);
+      gl_.texParameteri(gl_.TEXTURE_2D, gl_.TEXTURE_WRAP_T, gl_.CLAMP_TO_EDGE);
+
+      gl_.texSubImage2D(gl_.TEXTURE_2D, 0, 0, 0,
+                        3, curr_verts.length / 3,
+                        gl_.RGB, gl_.FLOAT,
+                        new Float32Array(curr_verts.flat()));
+
+      gl_.bindTexture(gl_.TEXTURE_2D, null);
+
+      this.verts_textures.push(texture);
+    }
+  }
+
+  this.SetSurfaces(verts);
 
   // SDE computation
   this.Compute = function(xmin, ymin, zmin,
@@ -13,20 +94,45 @@ function SDEstimator(verts) {
     var Hi = MatInv(H);  // inverse of the bandwidth matrix
     if (Hi === undefined) {
       alert("The input bandwidth matrix is not invertible.");
-      return undefined;
+      return;
     }
 
     var Hi_sqrt = MatSqrt(Hi);  // square root of Hi (i.e., Hi_sqrt x Hi_sqrt = Hi)
     if (Hi_sqrt === undefined) {
       alert("The input bandwidth matrix is not positive semidefinite.");
-      return undefined;
+      return;
     }
     Hi_sqrt = new Float32Array(Hi_sqrt.flat());
   };
+  // ---------------------------------------------------------------------------
 
-  // constants and utility functions (private) ---------------------------------
+  // private variables and functions -------------------------------------------
+  // constants
   var kEps = 1e-10;
   var kMaxSweeps = 64;
+
+  // subtraction of vectors
+  function VecSub(va, vb) {
+    return [va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]];
+  }
+
+  // cross product of vectors
+  function VecCross(va, vb) {
+    return [va[1] * vb[2] - va[2] * vb[1],
+            va[2] * vb[0] - va[0] * vb[2],
+            va[0] * vb[1] - va[1] * vb[0]];
+  }
+
+  // length of a vector
+  function VecLength(v) {
+    return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+  }
+
+  // area of a triangle
+  function TriangleArea(a, b, c) {
+    var ab = VecSub(b, a), ac = VecSub(c, a);
+    return .5 * VecLength(VecCross(ab, ac));
+  }
 
   // multiplication of matrices
   function MatMul(ma, mb) {
@@ -62,7 +168,7 @@ function SDEstimator(verts) {
     var p20 = m[1][0] * m[2][1] - m[1][1] * m[2][0];
 
     var t = m[0][0] * p00 + m[0][1] * p10 + m[0][2] * p20;
-    if (t == 0.) return undefined;
+    if (t == 0.) return;
 
     var t = 1. / t;
 
@@ -82,7 +188,7 @@ function SDEstimator(verts) {
     if (m[0][1] != m[1][0] ||
         m[0][2] != m[2][0] ||
         m[1][2] != m[2][1])
-      return undefined;
+      return;
 
     var res = {val : [0., 0., 0.],
                vec : [[1., 0., 0.],
@@ -181,9 +287,9 @@ function SDEstimator(verts) {
   // square root of a matrix
   function MatSqrt(m) {
     var eig = MatEig(m);
-    if (eig === undefined) return undefined;
+    if (eig === undefined) return;
     if (eig.val[0] < 0. || eig.val[1] < 0. || eig.val[2] < 0.)
-      return undefined;
+      return;
 
     var diag = [[Math.sqrt(eig.val[0]), 0., 0.],
                 [0., Math.sqrt(eig.val[1]), 0.],
