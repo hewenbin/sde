@@ -2891,6 +2891,23 @@ SDEstimator.fragment_glsl = [
   "in vec2 vUv;",
   "out vec4 fragColor;",
 
+  "float TriangleArea(vec3 a, vec3 b, vec3 c) {",
+    "vec3 ab = b - a, ac = c - a;",
+    "return .5 * length(cross(ab, ac));",
+  "}",
+
+  "vec4 PlaneOfTriangle(vec3 a, vec3 b, vec3 c) {",
+    "vec3 ab = b - a, ac = c - a;",
+    "vec4 nd;",
+    "nd.xyz = normalize(cross(ab, ac));",
+    "nd.w = dot(nd.xyz, a);",
+    "return nd;",
+  "}",
+
+  "vec3 ProjOnPlane(vec3 v, vec4 nd) {",
+    "return v - nd.xyz * nd.w;",
+  "}",
+
   "float Gamma(float h, float a) {",
     "return texture(uGammaTexture, vec2(a * 100. / 101. + .5 / 101.,",
                                        "h * 100. / 477. + .5 / 477.)).r;",
@@ -2904,11 +2921,48 @@ SDEstimator.fragment_glsl = [
     "x.xy = x.xy * (uMax.xy - uMin.xy) + uMin.xy;",
     "x.z = uZ;",
 
+    "vec3 a, b, c, ax, bx, cx;",
+    "vec3 aPrime, bPrime, cPrime;",
+    "vec4 nd;",
+    "vec3 aProj, bProj, cProj;",
+    "vec3 uAxis, vAxis;",
+    "vec2 a2D, b2D, c2D;",
     "for (int i = 0; i < uVertsTextureHeight; ++i) {",
+      "// three vertices of the current triangle",
       "float currHeight = (float(i) + .5) / float(uVertsTextureHeight);",
-      "vec3 a = texture(uVertsTexture, vec2(.5 / 3., currHeight)).xyz;",
-      "vec3 b = texture(uVertsTexture, vec2(1.5 / 3., currHeight)).xyz;",
-      "vec3 c = texture(uVertsTexture, vec2(2.5 / 3., currHeight)).xyz;",
+      "a = texture(uVertsTexture, vec2(.5 / 3., currHeight)).xyz;",
+      "b = texture(uVertsTexture, vec2(1.5 / 3., currHeight)).xyz;",
+      "c = texture(uVertsTexture, vec2(2.5 / 3., currHeight)).xyz;",
+
+      "// Transform the triangle based on the grid point position and the bandwidth matrix.",
+      "ax = x - a;",
+      "bx = x - b;",
+      "cx = x - c;",
+      "aPrime = uHiSqrt * ax;",
+      "bPrime = uHiSqrt * bx;",
+      "cPrime = uHiSqrt * cx;",
+
+      "float ct = TriangleArea(a, b, c) /",
+                 "TriangleArea(aPrime, bPrime, cPrime) *",
+                 "HiSqrtDet;",
+
+      "// Map the triangle into 2D.",
+      "nd = PlaneOfTriangle(aPrime, bPrime, cPrime);",
+      "aProj = ProjOnPlane(aPrime, nd);",
+      "bProj = ProjOnPlane(bPrime, nd);",
+      "cProj = ProjOnPlane(cPrime, nd);",
+
+      "uAxis = normalize(aProj - bProj);",
+      "vAxis = cross(uAxis, nd.xyz);",
+
+      "a2D.x = dot(aProj, uAxis);",
+      "a2D.y = dot(aProj, vAxis);",
+
+      "b2D.x = dot(bProj, uAxis);",
+      "b2D.y = dot(bProj, vAxis);",
+
+      "c2D.x = dot(cProj, uAxis);",
+      "c2D.y = dot(cProj, vAxis);",
     "}",
 
     "fragColor = vec4(Gamma(vUv.x * 4.76, vUv.y), 0., 0., 1.);",
