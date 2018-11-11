@@ -19,7 +19,7 @@ function SDEstimator(verts) {
     this.nverts = 0;
     this.area = 0.;
     for (var i = 0, il = this.verts_textures.length; i < il; ++i)
-      gl_.deleteTexture(this.verts_textures[i]);
+      gl_.deleteTexture(this.verts_textures[i].texture);
     this.verts_textures.length = 0;
 
     // Only keep triangles whose areas are greater than zero.
@@ -64,7 +64,8 @@ function SDEstimator(verts) {
 
       gl_.bindTexture(gl_.TEXTURE_2D, null);
 
-      this.verts_textures.push(texture);
+      this.verts_textures.push(
+          {"w": 3, "h": curr_verts.length / 3, "texture": texture});
     }
   }
 
@@ -154,6 +155,8 @@ function SDEstimator(verts) {
 
     // computation
     var uZLoc = gl_.getUniformLocation(program_, "uZ");
+    var uVertsTextureHeightLoc =
+        gl_.getUniformLocation(program_, "uVertsTextureHeight");
     var uVertsTextureLoc = gl_.getUniformLocation(program_, "uVertsTexture");
 
     var interm_res = new Float32Array(zdim * ydim * xdim * 4);
@@ -162,8 +165,10 @@ function SDEstimator(verts) {
 
     gl_.bindFramebuffer(gl_.FRAMEBUFFER, fbo);
     for (var i = 0, il = this.verts_textures.length; i < il; ++i) {
+      gl_.uniform1i(uVertsTextureHeightLoc, this.verts_textures[i].h);
+
       gl_.activeTexture(gl_.TEXTURE1);
-      gl_.bindTexture(gl_.TEXTURE_2D, this.verts_textures[i]);
+      gl_.bindTexture(gl_.TEXTURE_2D, this.verts_textures[i].texture);
       gl_.uniform1i(uVertsTextureLoc, 1);
 
       for (var j = 0; j < zdim; ++j) {
@@ -2881,6 +2886,7 @@ SDEstimator.fragment_glsl = [
   "uniform vec3 uMin, uMax, uDim;",
   "uniform mat3 uHiSqrt;",
   "uniform sampler2D uGammaTexture;",
+  "uniform int uVertsTextureHeight;",
   "uniform sampler2D uVertsTexture;",
   "in vec2 vUv;",
   "out vec4 fragColor;",
@@ -2897,6 +2903,13 @@ SDEstimator.fragment_glsl = [
     "x.xy = (vUv * uDim.xy - vec2(.5, .5)) / (uDim.xy - vec2(1., 1.));",
     "x.xy = x.xy * (uMax.xy - uMin.xy) + uMin.xy;",
     "x.z = uZ;",
+
+    "for (int i = 0; i < uVertsTextureHeight; ++i) {",
+      "float currHeight = (float(i) + .5) / float(uVertsTextureHeight);",
+      "vec3 a = texture(uVertsTexture, vec2(.5 / 3., currHeight)).xyz;",
+      "vec3 b = texture(uVertsTexture, vec2(1.5 / 3., currHeight)).xyz;",
+      "vec3 c = texture(uVertsTexture, vec2(2.5 / 3., currHeight)).xyz;",
+    "}",
 
     "fragColor = vec4(Gamma(vUv.x * 4.76, vUv.y), 0., 0., 1.);",
   "}"
