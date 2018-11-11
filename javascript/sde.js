@@ -134,6 +134,18 @@ function SDEstimator(verts) {
     gl_.vertexAttribPointer(aPosLoc, 2, gl_.FLOAT, gl_.FALSE, 16, 0);
     gl_.vertexAttribPointer(aUvLoc, 2, gl_.FLOAT, gl_.FALSE, 16, 8);
 
+    var uMinLoc = gl_.getUniformLocation(program_, "uMin");
+    var uMaxLoc = gl_.getUniformLocation(program_, "uMax");
+    var uDimLoc = gl_.getUniformLocation(program_, "uDim");
+    gl_.uniform3fv(uMinLoc, new Float32Array([xmin, ymin, zmin]));
+    gl_.uniform3fv(uMaxLoc, new Float32Array([xmax, ymax, zmax]));
+    gl_.uniform3fv(uDimLoc, new Float32Array([xdim, ydim, zdim]));
+
+    var uHiSqrtLoc = gl_.getUniformLocation(program_, "uHiSqrt");
+    gl_.uniformMatrix3fv(uHiSqrtLoc, false, Hi_sqrt);
+
+    var uZLoc = gl_.getUniformLocation(program_, "uZ");
+
     var uGammaTextureLoc = gl_.getUniformLocation(program_, "uGammaTexture");
 
     gl_.activeTexture(gl_.TEXTURE1);
@@ -143,6 +155,8 @@ function SDEstimator(verts) {
     var res = new Float32Array(zdim * ydim * xdim * 4);
     gl_.bindFramebuffer(gl_.FRAMEBUFFER, fbo);
     for (var i = 0; i < zdim; ++i) {
+      gl_.uniform1f(uZLoc, i / (zdim - 1) * (zmax - zmin) + zmin);
+
       gl_.framebufferTextureLayer(
           gl_.FRAMEBUFFER, gl_.COLOR_ATTACHMENT0, sde_texture, 0, i);
       gl_.drawArrays(gl_.TRIANGLE_STRIP, 0, 4);
@@ -2844,6 +2858,10 @@ SDEstimator.vertex_glsl = [
 SDEstimator.fragment_glsl = [
   "#version 300 es",
   "precision highp float;",
+  "uniform float uZ;",
+  "uniform vec3 uMin, uMax, uDim;",
+  "uniform mat3 uHiSqrt;",
+  "uniform sampler2D uVertsTexture;",
   "uniform sampler2D uGammaTexture;",
   "in vec2 vUv;",
   "out vec4 fragColor;",
@@ -2854,6 +2872,13 @@ SDEstimator.fragment_glsl = [
   "}",
 
   "void main() {",
+    "float HiSqrtDet = determinant(uHiSqrt);",
+    "// physical position of the grid point",
+    "vec3 x;",
+    "x.xy = (vUv * uDim.xy - vec2(.5, .5)) / (uDim.xy - vec2(1., 1.));",
+    "x.xy = x.xy * (uMax.xy - uMin.xy) + uMin.xy;",
+    "x.z = uZ;",
+
     "fragColor = vec4(Gamma(vUv.x * 4.76, vUv.y), 0., 0., 1.);",
   "}"
 ].join("\n");
