@@ -2882,6 +2882,9 @@ SDEstimator.vertex_glsl = [
 SDEstimator.fragment_glsl = [
   "#version 300 es",
   "precision highp float;",
+  "#define kPi 3.141592653589793",
+  "#define kSqrt2Recip 0.7071067811865475",
+  "#define kSqrt2PiRecip 0.3989422804014327",
   "uniform float uZ;",
   "uniform vec3 uMin, uMax, uDim;",
   "uniform mat3 uHiSqrt;",
@@ -2890,6 +2893,14 @@ SDEstimator.fragment_glsl = [
   "uniform sampler2D uVertsTexture;",
   "in vec2 vUv;",
   "out vec4 fragColor;",
+
+  "// https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions (maximum error: 2.5×10−5)",
+  "float erf(float x) {",
+    "float t = 1. / (1. + .47047 * abs(x));",
+    "float res = 1. - t * (.3480242 + t * (-.0958798 + t * .7478556)) *",
+                     "exp(-(x * x));",
+    "return res * sign(x);",
+  "}",
 
   "float TriangleArea(vec3 a, vec3 b, vec3 c) {",
     "vec3 ab = b - a, ac = c - a;",
@@ -2908,9 +2919,47 @@ SDEstimator.fragment_glsl = [
     "return v - nd.xyz * nd.w;",
   "}",
 
+  "float Sign(float ax, float ay, float bx, float by, float cx, float cy) {",
+    "return (ax - cx) * (by - cy) - (bx - cx) * (ay - cy);",
+  "}",
+
+  "bool PointInTriangle(float x, float y,",
+                       "float ax, float ay,",
+                       "float bx, float by,",
+                       "float cx, float cy) {",
+    "bool b1 = Sign(x, y, ax, ay, bx, by) < 0.;",
+    "bool b2 = Sign(x, y, bx, by, cx, cy) < 0.;",
+    "bool b3 = Sign(x, y, cx, cy, ax, ay) < 0.;",
+    "return (b1 == b2) && (b2 == b3);",
+  "}",
+
+  "float NormPdf(float x) {",
+    "return kSqrt2PiRecip * exp(-.5 * x * x);",
+  "}",
+
+  "float NormCdf(float x) {",
+    "return .5 * (1. + erf(x * kSqrt2Recip));",
+  "}",
+
   "float Gamma(float h, float a) {",
     "return texture(uGammaTexture, vec2(a * 100. / 101. + .5 / 101.,",
                                        "h * 100. / 477. + .5 / 477.)).r;",
+  "}",
+
+  "float GammaSwitch(float h, float a) {",
+    "h = abs(h);",
+    "if (h > 4.76) return 0.;",
+
+    "if (a < -1.) {",
+      "float cdf0 = NormCdf(h), cdf1 = NormCdf(-a * h);",
+      "return -.5 * (cdf0 + cdf1) + cdf0 * cdf1 + Gamma(-a * h, 1. / -a);",
+    "}",
+    "if (a > 1.) {",
+      "float cdf0 = NormCdf(h), cdf1 = NormCdf(a * h);",
+      "return .5 * (cdf0 + cdf1) - cdf0 * cdf1 - Gamma(a * h, 1. / a);",
+    "}",
+    "if (a < 0.) return -Gamma(h, -a);",
+    "return Gamma(h, a);",
   "}",
 
   "void main() {",
