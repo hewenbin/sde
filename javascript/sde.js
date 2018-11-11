@@ -75,6 +75,7 @@ function SDEstimator(verts) {
                           xmax, ymax, zmax,  // Physical domain that density estimation is performed on.
                           xdim, ydim, zdim,  // Grid resolution of the physical domain.
                           H) {  // bandwidth matrix
+    // Copy the parameters from CPU to GPU.
     var Hi = MatInv(H);  // inverse of the bandwidth matrix
     if (Hi === undefined) {
       alert("The input bandwidth matrix is not invertible.");
@@ -87,6 +88,18 @@ function SDEstimator(verts) {
       return;
     }
     Hi_sqrt = new Float32Array(Hi_sqrt.flat());
+
+    gl_.useProgram(program_);
+
+    var uMinLoc = gl_.getUniformLocation(program_, "uMin");
+    var uMaxLoc = gl_.getUniformLocation(program_, "uMax");
+    var uDimLoc = gl_.getUniformLocation(program_, "uDim");
+    gl_.uniform3fv(uMinLoc, new Float32Array([xmin, ymin, zmin]));
+    gl_.uniform3fv(uMaxLoc, new Float32Array([xmax, ymax, zmax]));
+    gl_.uniform3fv(uDimLoc, new Float32Array([xdim, ydim, zdim]));
+
+    var uHiSqrtLoc = gl_.getUniformLocation(program_, "uHiSqrt");
+    gl_.uniformMatrix3fv(uHiSqrtLoc, false, Hi_sqrt);
 
     // Create a 3D texture to store the density estimation result.
     var sde_texture = gl_.createTexture();
@@ -114,12 +127,7 @@ function SDEstimator(verts) {
 
     gl_.bindFramebuffer(gl_.FRAMEBUFFER, null);
 
-    // setup viewport
-    gl_.viewport(0, 0, xdim, ydim);
-
-    // computation
-    gl_.useProgram(program_);
-
+    // Create a vertex buffer object.
     var aPosLoc = gl_.getAttribLocation(program_, "aPos");
     var aUvLoc = gl_.getAttribLocation(program_, "aUv");
 
@@ -134,37 +142,47 @@ function SDEstimator(verts) {
     gl_.vertexAttribPointer(aPosLoc, 2, gl_.FLOAT, gl_.FALSE, 16, 0);
     gl_.vertexAttribPointer(aUvLoc, 2, gl_.FLOAT, gl_.FALSE, 16, 8);
 
-    var uMinLoc = gl_.getUniformLocation(program_, "uMin");
-    var uMaxLoc = gl_.getUniformLocation(program_, "uMax");
-    var uDimLoc = gl_.getUniformLocation(program_, "uDim");
-    gl_.uniform3fv(uMinLoc, new Float32Array([xmin, ymin, zmin]));
-    gl_.uniform3fv(uMaxLoc, new Float32Array([xmax, ymax, zmax]));
-    gl_.uniform3fv(uDimLoc, new Float32Array([xdim, ydim, zdim]));
+    // setup viewport
+    gl_.viewport(0, 0, xdim, ydim);
 
-    var uHiSqrtLoc = gl_.getUniformLocation(program_, "uHiSqrt");
-    gl_.uniformMatrix3fv(uHiSqrtLoc, false, Hi_sqrt);
-
-    var uZLoc = gl_.getUniformLocation(program_, "uZ");
-
+    // setup gamma texture
     var uGammaTextureLoc = gl_.getUniformLocation(program_, "uGammaTexture");
 
-    gl_.activeTexture(gl_.TEXTURE1);
+    gl_.activeTexture(gl_.TEXTURE0);
     gl_.bindTexture(gl_.TEXTURE_2D, SDEstimator.gamma_texture);
-    gl_.uniform1i(uGammaTextureLoc, 1);
+    gl_.uniform1i(uGammaTextureLoc, 0);
 
+    // computation
+    var uZLoc = gl_.getUniformLocation(program_, "uZ");
+    var uVertsTextureLoc = gl_.getUniformLocation(program_, "uVertsTexture");
+
+    var interm_res = new Float32Array(zdim * ydim * xdim * 4);
     var res = new Float32Array(zdim * ydim * xdim * 4);
+    res.fill(0.);
+
     gl_.bindFramebuffer(gl_.FRAMEBUFFER, fbo);
-    for (var i = 0; i < zdim; ++i) {
-      gl_.uniform1f(uZLoc, i / (zdim - 1) * (zmax - zmin) + zmin);
+    for (var i = 0, il = this.verts_textures.length; i < il; ++i) {
+      gl_.activeTexture(gl_.TEXTURE1);
+      gl_.bindTexture(gl_.TEXTURE_2D, this.verts_textures[i]);
+      gl_.uniform1i(uVertsTextureLoc, 1);
 
-      gl_.framebufferTextureLayer(
-          gl_.FRAMEBUFFER, gl_.COLOR_ATTACHMENT0, sde_texture, 0, i);
-      gl_.drawArrays(gl_.TRIANGLE_STRIP, 0, 4);
+      for (var j = 0; j < zdim; ++j) {
+        gl_.uniform1f(uZLoc, j / (zdim - 1) * (zmax - zmin) + zmin);
 
-      // Copy the density estimation result from GPU to CPU.
-      gl_.readBuffer(gl_.COLOR_ATTACHMENT0);
-      gl_.readPixels(0, 0, xdim, ydim, gl_.RGBA, gl_.FLOAT,
-                     res, i * ydim * xdim * 4);
+        gl_.framebufferTextureLayer(
+            gl_.FRAMEBUFFER, gl_.COLOR_ATTACHMENT0, sde_texture, 0, j);
+        gl_.drawArrays(gl_.TRIANGLE_STRIP, 0, 4);
+
+        // Copy the density estimation result from GPU to CPU.
+        gl_.readBuffer(gl_.COLOR_ATTACHMENT0);
+        gl_.readPixels(0, 0, xdim, ydim, gl_.RGBA, gl_.FLOAT,
+                       interm_res, j * ydim * xdim * 4);
+      }
+
+      // Aggregate the intermediate density estimation result into the final result.
+      res.forEach(function(e, i, a) {
+        a[i] += interm_res[i];
+      });
     }
 
     // Release buffers and textures
@@ -175,11 +193,12 @@ function SDEstimator(verts) {
 
     gl_.bindFramebuffer(gl_.FRAMEBUFFER, null);
     gl_.bindBuffer(gl_.ARRAY_BUFFER, null);
-    gl_.useProgram(null);
 
     gl_.deleteBuffer(vbo);
     gl_.deleteFramebuffer(fbo);
     gl_.deleteTexture(sde_texture);
+
+    gl_.useProgram(null);
 
     // Normalize SDE by the area of the surface.
     for (var i = 0, il = zdim * ydim * xdim * 4; i < il; i += 4)
@@ -2861,8 +2880,8 @@ SDEstimator.fragment_glsl = [
   "uniform float uZ;",
   "uniform vec3 uMin, uMax, uDim;",
   "uniform mat3 uHiSqrt;",
-  "uniform sampler2D uVertsTexture;",
   "uniform sampler2D uGammaTexture;",
+  "uniform sampler2D uVertsTexture;",
   "in vec2 vUv;",
   "out vec4 fragColor;",
 
