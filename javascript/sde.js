@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
-function SDEstimator(verts) {
+function DensityEstimator(verts) {
   // public variables and functions --------------------------------------------
   // set surfaces
   this.nverts = 0;
@@ -10,9 +10,9 @@ function SDEstimator(verts) {
   this.verts_textures = [];
 
   // local references of canvas, gl, and program
-  var canvas_ = SDEstimator.canvas,
-      gl_ = SDEstimator.gl,
-      program_ = SDEstimator.program;
+  var canvas_ = DensityEstimator.canvas,
+      gl_ = DensityEstimator.gl,
+      program_ = DensityEstimator.program;
 
   this.SetSurfaces = function(verts) {
     // reset surfaces
@@ -81,6 +81,7 @@ function SDEstimator(verts) {
                           H,  // bandwidth matrix
                           normed=false,  // If true, normalize SDE by the area of the surface.
                           red_only=false) {  // If true, only output the red channel.
+    console.time("SDE computation time");
     // Copy the parameters from CPU to GPU.
     var Hi = MatInv(H);  // inverse of the bandwidth matrix
     if (Hi === undefined) {
@@ -155,7 +156,7 @@ function SDEstimator(verts) {
     var uGammaTextureLoc = gl_.getUniformLocation(program_, "uGammaTexture");
 
     gl_.activeTexture(gl_.TEXTURE0);
-    gl_.bindTexture(gl_.TEXTURE_2D, SDEstimator.gamma_texture);
+    gl_.bindTexture(gl_.TEXTURE_2D, DensityEstimator.gamma_texture);
     gl_.uniform1i(uGammaTextureLoc, 0);
 
     // computation
@@ -221,6 +222,8 @@ function SDEstimator(verts) {
               return i % 4 === 0;
             });
     }
+
+    console.timeEnd("SDE computation time");
 
     return res;
   };
@@ -422,25 +425,28 @@ function SDEstimator(verts) {
 
 // static variables and functions ----------------------------------------------
 // canvas and gl
-SDEstimator.canvas = document.createElement("canvas");
+DensityEstimator.canvas = document.createElement("canvas");
 
-SDEstimator.gl = SDEstimator.canvas.getContext("webgl2");
-if (!SDEstimator.gl) {
+DensityEstimator.gl =
+    DensityEstimator.canvas.getContext("webgl2");
+if (!DensityEstimator.gl) {
   alert("WebGL2 is not supported by this browser.");
 }
 
-SDEstimator.ext = SDEstimator.gl.getExtension("EXT_color_buffer_float");
-if (!SDEstimator.ext) {
+DensityEstimator.ext =
+    DensityEstimator.gl.getExtension("EXT_color_buffer_float");
+if (!DensityEstimator.ext) {
   alert("EXT_color_buffer_float is not supported by this browser.");
 }
 
-SDEstimator.oes = SDEstimator.gl.getExtension("OES_texture_float_linear");
-if (!SDEstimator.oes) {
+DensityEstimator.oes =
+    DensityEstimator.gl.getExtension("OES_texture_float_linear");
+if (!DensityEstimator.oes) {
   alert("OES_texture_float_linear is not supported by this browser.");
 }
 
 // gamma
-SDEstimator.gamma_table = new Float32Array([
+DensityEstimator.gamma_table = new Float32Array([
 0.0, 0.0015914964, 0.0031826745, 0.004773217, 0.0063628056, 0.0079511255, 0.009537862, 0.011122703, 0.012705337, 0.014285457, 0.01586276, 0.01743694, 0.019007703, 0.020574756, 0.022137806, 0.023696572, 0.02525077, 0.026800126, 0.028344372, 0.029883241,
 0.03141648, 0.03294383, 0.034465052, 0.0359799, 0.037488148, 0.038989566, 0.040483933, 0.041971043, 0.043450683, 0.044922665, 0.04638679, 0.04784288, 0.049290754, 0.05073025, 0.0521612, 0.05358346, 0.054996878, 0.056401316, 0.057796642, 0.059182733,
 0.06055947, 0.06192675, 0.06328446, 0.06463251, 0.065970816, 0.06729929, 0.068617865, 0.069926456, 0.07122502, 0.07251348, 0.07379181, 0.07505995, 0.07631787, 0.07756553, 0.078802906, 0.08002998, 0.08124674, 0.08245317, 0.083649255, 0.084835015,
@@ -2852,35 +2858,36 @@ SDEstimator.gamma_table = new Float32Array([
 4.839644e-07, 4.839678e-07, 4.8397067e-07, 4.8397294e-07, 4.8397476e-07, 4.839763e-07, 4.839775e-07, 4.839785e-07, 4.839793e-07, 4.8397993e-07, 4.8398044e-07, 4.8398084e-07, 4.839812e-07, 4.839814e-07, 4.8398164e-07, 4.839818e-07, 4.839819e-07
 ]);
 
-SDEstimator.gamma_texture = SDEstimator.gl.createTexture();
-SDEstimator.gl.bindTexture(
-    SDEstimator.gl.TEXTURE_2D, SDEstimator.gamma_texture);
+DensityEstimator.gamma_texture = DensityEstimator.gl.createTexture();
+DensityEstimator.gl.bindTexture(
+    DensityEstimator.gl.TEXTURE_2D, DensityEstimator.gamma_texture);
 
-SDEstimator.gl.texImage2D(
-    SDEstimator.gl.TEXTURE_2D, 0, SDEstimator.gl.R32F, 101, 477, 0,
-    SDEstimator.gl.RED, SDEstimator.gl.FLOAT, SDEstimator.gamma_table);
+DensityEstimator.gl.texImage2D(
+    DensityEstimator.gl.TEXTURE_2D, 0, DensityEstimator.gl.R32F, 101, 477, 0,
+    DensityEstimator.gl.RED, DensityEstimator.gl.FLOAT,
+    DensityEstimator.gamma_table);
 
-SDEstimator.gl.texParameteri(
-    SDEstimator.gl.TEXTURE_2D,
-    SDEstimator.gl.TEXTURE_MAG_FILTER,
-    SDEstimator.gl.LINEAR);
-SDEstimator.gl.texParameteri(
-    SDEstimator.gl.TEXTURE_2D,
-    SDEstimator.gl.TEXTURE_MIN_FILTER,
-    SDEstimator.gl.LINEAR);
-SDEstimator.gl.texParameteri(
-    SDEstimator.gl.TEXTURE_2D,
-    SDEstimator.gl.TEXTURE_WRAP_S,
-    SDEstimator.gl.CLAMP_TO_EDGE);
-SDEstimator.gl.texParameteri(
-    SDEstimator.gl.TEXTURE_2D,
-    SDEstimator.gl.TEXTURE_WRAP_T,
-    SDEstimator.gl.CLAMP_TO_EDGE);
+DensityEstimator.gl.texParameteri(
+    DensityEstimator.gl.TEXTURE_2D,
+    DensityEstimator.gl.TEXTURE_MAG_FILTER,
+    DensityEstimator.gl.LINEAR);
+DensityEstimator.gl.texParameteri(
+    DensityEstimator.gl.TEXTURE_2D,
+    DensityEstimator.gl.TEXTURE_MIN_FILTER,
+    DensityEstimator.gl.LINEAR);
+DensityEstimator.gl.texParameteri(
+    DensityEstimator.gl.TEXTURE_2D,
+    DensityEstimator.gl.TEXTURE_WRAP_S,
+    DensityEstimator.gl.CLAMP_TO_EDGE);
+DensityEstimator.gl.texParameteri(
+    DensityEstimator.gl.TEXTURE_2D,
+    DensityEstimator.gl.TEXTURE_WRAP_T,
+    DensityEstimator.gl.CLAMP_TO_EDGE);
 
-SDEstimator.gl.bindTexture(SDEstimator.gl.TEXTURE_2D, null);
+DensityEstimator.gl.bindTexture(DensityEstimator.gl.TEXTURE_2D, null);
 
 // shaders
-SDEstimator.vertex_glsl = [
+DensityEstimator.vertex_glsl = [
   "#version 300 es",
   "precision highp float;",
   "in vec2 aPos;",
@@ -2892,7 +2899,7 @@ SDEstimator.vertex_glsl = [
   "}"
 ].join("\n");
 
-SDEstimator.fragment_glsl = [
+DensityEstimator.fragment_glsl = [
   "#version 300 es",
   "precision highp float;",
   "#define kPi 3.141592653589793",
@@ -2994,6 +3001,7 @@ SDEstimator.fragment_glsl = [
 
     "vec3 a, b, c, ax, bx, cx;",
     "vec3 aPrime, bPrime, cPrime;",
+    "vec3 aabbMin, aabbMax, four3D = vec3(4.), zero3D = vec3(0.);",
     "vec4 nd;",
     "vec3 aProj, bProj, cProj;",
     "vec3 uAxis, vAxis;",
@@ -3022,147 +3030,152 @@ SDEstimator.fragment_glsl = [
       "bPrime = uHiSqrt * bx;",
       "cPrime = uHiSqrt * cx;",
 
-      "float ct = TriangleArea(a, b, c) /",
-                 "TriangleArea(aPrime, bPrime, cPrime) *",
-                 "HiSqrtDet;",
+      "aabbMin = min((aPrime, bPrime), cPrime);",
+      "aabbMax = max((aPrime, bPrime), cPrime);",
 
-      "// Map the triangle into 2D.",
-      "nd = PlaneOfTriangle(aPrime, bPrime, cPrime);",
-      "aProj = ProjOnPlane(aPrime, nd);",
-      "bProj = ProjOnPlane(bPrime, nd);",
-      "cProj = ProjOnPlane(cPrime, nd);",
+      "if (all(lessThan((aabbMin - four3D) * (aabbMax + four3D), zero3D))) {",
+        "float ct = TriangleArea(a, b, c) /",
+                   "TriangleArea(aPrime, bPrime, cPrime) *",
+                   "HiSqrtDet;",
 
-      "uAxis = normalize(aProj - bProj);",
-      "vAxis = cross(uAxis, nd.xyz);",
+        "// Map the triangle into 2D.",
+        "nd = PlaneOfTriangle(aPrime, bPrime, cPrime);",
+        "aProj = ProjOnPlane(aPrime, nd);",
+        "bProj = ProjOnPlane(bPrime, nd);",
+        "cProj = ProjOnPlane(cPrime, nd);",
 
-      "a2D.x = dot(aProj, uAxis);",
-      "a2D.y = dot(aProj, vAxis);",
+        "uAxis = normalize(aProj - bProj);",
+        "vAxis = cross(uAxis, nd.xyz);",
 
-      "b2D.x = dot(bProj, uAxis);",
-      "b2D.y = dot(bProj, vAxis);",
+        "a2D.x = dot(aProj, uAxis);",
+        "a2D.y = dot(aProj, vAxis);",
 
-      "c2D.x = dot(cProj, uAxis);",
-      "c2D.y = dot(cProj, vAxis);",
+        "b2D.x = dot(bProj, uAxis);",
+        "b2D.y = dot(bProj, vAxis);",
 
-      "// Compute SDE based on bivariate normal integrals.",
-      "if (any(notEqual(a2D, zero2D)) &&",
-          "any(notEqual(b2D, zero2D)) &&",
-          "any(notEqual(c2D, zero2D))) {",
-        "// segment bc",
-        "bc2D = c2D - b2D;",
-        "bxc = b2D.x * c2D.y - b2D.y * c2D.x;",
-        "if (bxc != 0.) {",
-          "h = bxc / length(bc2D);",
-          "a1 = dot(b2D, bc2D) / bxc;",
-          "a2 = dot(c2D, bc2D) / bxc;",
-          "alpha.x = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
-        "} else {",
-          "alpha.x = dot(b2D, c2D) < 0. ? .5 : 0.;",
+        "c2D.x = dot(cProj, uAxis);",
+        "c2D.y = dot(cProj, vAxis);",
+
+        "// Compute SDE based on bivariate normal integrals.",
+        "if (any(notEqual(a2D, zero2D)) &&",
+            "any(notEqual(b2D, zero2D)) &&",
+            "any(notEqual(c2D, zero2D))) {",
+          "// segment bc",
+          "bc2D = c2D - b2D;",
+          "bxc = b2D.x * c2D.y - b2D.y * c2D.x;",
+          "if (bxc != 0.) {",
+            "h = bxc / length(bc2D);",
+            "a1 = dot(b2D, bc2D) / bxc;",
+            "a2 = dot(c2D, bc2D) / bxc;",
+            "alpha.x = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+          "} else {",
+            "alpha.x = dot(b2D, c2D) < 0. ? .5 : 0.;",
+          "}",
+
+          "// segment ca",
+          "ca2D = a2D - c2D;",
+          "cxa = c2D.x * a2D.y - c2D.y * a2D.x;",
+          "if (cxa != 0.) {",
+            "h = cxa / length(ca2D);",
+            "a1 = dot(c2D, ca2D) / cxa;",
+            "a2 = dot(a2D, ca2D) / cxa;",
+            "alpha.y = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+          "} else {",
+            "alpha.y = dot(c2D, a2D) < 0. ? .5 : 0.;",
+          "}",
+
+          "// segment ab",
+          "ab2D = b2D - a2D;",
+          "axb = a2D.x * b2D.y - a2D.y * b2D.x;",
+          "if (axb != 0.) {",
+            "h = axb / length(ab2D);",
+            "a1 = dot(a2D, ab2D) / axb;",
+            "a2 = dot(b2D, ab2D) / axb;",
+            "alpha.z = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+          "} else {",
+            "alpha.z = dot(a2D, b2D) < 0. ? .5 : 0.;",
+          "}",
+
+          "// Combine alpha bc, ca, and ab.",
+          "if (PointInTriangle(0., 0., a2D.x, a2D.y,",
+                              "b2D.x, b2D.y, c2D.x, c2D.y)) {",
+            "res += (1. - dot(alpha, vec3(1.))) * NormPdf(nd.w) * ct;",
+          "} else {",
+            "a2DNorm = normalize(a2D);",
+            "b2DNorm = normalize(b2D);",
+            "c2DNorm = normalize(c2D);",
+            "coss.x = dot(b2DNorm, c2DNorm);",
+            "coss.y = dot(c2DNorm, a2DNorm);",
+            "coss.z = dot(a2DNorm, b2DNorm);",
+
+            "cossMinId = coss.y < coss.x ? (coss.z < coss.y ? 2 : 1) :",
+                                          "(coss.z < coss.x ? 2 : 0);",
+
+            "res += abs(dot(alpha, vec3(1.)) - 2. * alpha[cossMinId])",
+                   "* NormPdf(nd.w) * ct;",
+          "}",
         "}",
 
-        "// segment ca",
-        "ca2D = a2D - c2D;",
-        "cxa = c2D.x * a2D.y - c2D.y * a2D.x;",
-        "if (cxa != 0.) {",
-          "h = cxa / length(ca2D);",
-          "a1 = dot(c2D, ca2D) / cxa;",
-          "a2 = dot(a2D, ca2D) / cxa;",
-          "alpha.y = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
-        "} else {",
-          "alpha.y = dot(c2D, a2D) < 0. ? .5 : 0.;",
-        "}",
+        "// Handle spacial cases.",
+        "else if (all(equal(a2D, zero2D))) {",
+          "// segment bc",
+          "bc2D = c2D - b2D;",
+          "bxc = b2D.x * c2D.y - b2D.y * c2D.x;",
+          "if (bxc != 0.) {",
+            "h = bxc / length(bc2D);",
+            "a1 = dot(b2D, bc2D) / bxc;",
+            "a2 = dot(c2D, bc2D) / bxc;",
+            "alpha.x = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+          "} else {",
+            "alpha.x = dot(b2D, c2D) < 0. ? .5 : 0.;",
+          "}",
 
-        "// segment ab",
-        "ab2D = b2D - a2D;",
-        "axb = a2D.x * b2D.y - a2D.y * b2D.x;",
-        "if (axb != 0.) {",
-          "h = axb / length(ab2D);",
-          "a1 = dot(a2D, ab2D) / axb;",
-          "a2 = dot(b2D, ab2D) / axb;",
-          "alpha.z = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
-        "} else {",
-          "alpha.z = dot(a2D, b2D) < 0. ? .5 : 0.;",
-        "}",
-
-        "// Combine alpha bc, ca, and ab.",
-        "if (PointInTriangle(0., 0., a2D.x, a2D.y,",
-                            "b2D.x, b2D.y, c2D.x, c2D.y)) {",
-          "res += (1. - dot(alpha, vec3(1.))) * NormPdf(nd.w) * ct;",
-        "} else {",
-          "a2DNorm = normalize(a2D);",
           "b2DNorm = normalize(b2D);",
           "c2DNorm = normalize(c2D);",
-          "coss.x = dot(b2DNorm, c2DNorm);",
-          "coss.y = dot(c2DNorm, a2DNorm);",
-          "coss.z = dot(a2DNorm, b2DNorm);",
 
-          "cossMinId = coss.y < coss.x ? (coss.z < coss.y ? 2 : 1) :",
-                                        "(coss.z < coss.x ? 2 : 0);",
-
-          "res += abs(dot(alpha, vec3(1.)) - 2. * alpha[cossMinId])",
-                 "* NormPdf(nd.w) * ct;",
-        "}",
-      "}",
-
-      "// Handle spacial cases.",
-      "else if (all(equal(a2D, zero2D))) {",
-        "// segment bc",
-        "bc2D = c2D - b2D;",
-        "bxc = b2D.x * c2D.y - b2D.y * c2D.x;",
-        "if (bxc != 0.) {",
-          "h = bxc / length(bc2D);",
-          "a1 = dot(b2D, bc2D) / bxc;",
-          "a2 = dot(c2D, bc2D) / bxc;",
-          "alpha.x = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
-        "} else {",
-          "alpha.x = dot(b2D, c2D) < 0. ? .5 : 0.;",
+          "res += (acos(dot(b2DNorm, c2DNorm)) /",
+                  "kPi * .5 - alpha.x) * NormPdf(nd.w) * ct;",
         "}",
 
-        "b2DNorm = normalize(b2D);",
-        "c2DNorm = normalize(c2D);",
+        "else if (all(equal(b2D, zero2D))) {",
+          "// segment ca",
+          "ca2D = a2D - c2D;",
+          "cxa = c2D.x * a2D.y - c2D.y * a2D.x;",
+          "if (cxa != 0.) {",
+            "h = cxa / length(ca2D);",
+            "a1 = dot(c2D, ca2D) / cxa;",
+            "a2 = dot(a2D, ca2D) / cxa;",
+            "alpha.y = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+          "} else {",
+            "alpha.y = dot(c2D, a2D) < 0. ? .5 : 0.;",
+          "}",
 
-        "res += (acos(dot(b2DNorm, c2DNorm)) /",
-                "kPi * .5 - alpha.x) * NormPdf(nd.w) * ct;",
-      "}",
+          "c2DNorm = normalize(c2D);",
+          "a2DNorm = normalize(a2D);",
 
-      "else if (all(equal(b2D, zero2D))) {",
-        "// segment ca",
-        "ca2D = a2D - c2D;",
-        "cxa = c2D.x * a2D.y - c2D.y * a2D.x;",
-        "if (cxa != 0.) {",
-          "h = cxa / length(ca2D);",
-          "a1 = dot(c2D, ca2D) / cxa;",
-          "a2 = dot(a2D, ca2D) / cxa;",
-          "alpha.y = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
-        "} else {",
-          "alpha.y = dot(c2D, a2D) < 0. ? .5 : 0.;",
+          "res += (acos(dot(c2DNorm, a2DNorm)) /",
+                  "kPi * .5 - alpha.y) * NormPdf(nd.w) * ct;",
         "}",
 
-        "c2DNorm = normalize(c2D);",
-        "a2DNorm = normalize(a2D);",
+        "else if (all(equal(c2D, zero2D))) {",
+          "// segment ab",
+          "ab2D = b2D - a2D;",
+          "axb = a2D.x * b2D.y - a2D.y * b2D.x;",
+          "if (axb != 0.) {",
+            "h = axb / length(ab2D);",
+            "a1 = dot(a2D, ab2D) / axb;",
+            "a2 = dot(b2D, ab2D) / axb;",
+            "alpha.z = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+          "} else {",
+            "alpha.z = dot(a2D, b2D) < 0. ? .5 : 0.;",
+          "}",
 
-        "res += (acos(dot(c2DNorm, a2DNorm)) /",
-                "kPi * .5 - alpha.y) * NormPdf(nd.w) * ct;",
-      "}",
+          "a2DNorm = normalize(a2D);",
+          "b2DNorm = normalize(b2D);",
 
-      "else if (all(equal(c2D, zero2D))) {",
-        "// segment ab",
-        "ab2D = b2D - a2D;",
-        "axb = a2D.x * b2D.y - a2D.y * b2D.x;",
-        "if (axb != 0.) {",
-          "h = axb / length(ab2D);",
-          "a1 = dot(a2D, ab2D) / axb;",
-          "a2 = dot(b2D, ab2D) / axb;",
-          "alpha.z = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
-        "} else {",
-          "alpha.z = dot(a2D, b2D) < 0. ? .5 : 0.;",
+          "res += (acos(dot(a2DNorm, b2DNorm)) /",
+                  "kPi * .5 - alpha.x) * NormPdf(nd.w) * ct;",
         "}",
-
-        "a2DNorm = normalize(a2D);",
-        "b2DNorm = normalize(b2D);",
-
-        "res += (acos(dot(a2DNorm, b2DNorm)) /",
-                "kPi * .5 - alpha.x) * NormPdf(nd.w) * ct;",
       "}",
     "}",
 
@@ -3170,7 +3183,7 @@ SDEstimator.fragment_glsl = [
   "}"
 ].join("\n");
 
-SDEstimator.GetShader = function(gl, type, code) {
+DensityEstimator.GetShader = function(gl, type, code) {
   var shader = gl.createShader(type);
 
   gl.shaderSource(shader, code);
@@ -3188,21 +3201,21 @@ SDEstimator.GetShader = function(gl, type, code) {
   return shader;
 }
 
-SDEstimator.program = SDEstimator.gl.createProgram();
+DensityEstimator.program = DensityEstimator.gl.createProgram();
 
-SDEstimator.gl.attachShader(
-    SDEstimator.program,
-    SDEstimator.GetShader(
-        SDEstimator.gl,
-        SDEstimator.gl.VERTEX_SHADER,
-        SDEstimator.vertex_glsl));
+DensityEstimator.gl.attachShader(
+    DensityEstimator.program,
+    DensityEstimator.GetShader(
+        DensityEstimator.gl,
+        DensityEstimator.gl.VERTEX_SHADER,
+        DensityEstimator.vertex_glsl));
 
-SDEstimator.gl.attachShader(
-    SDEstimator.program,
-    SDEstimator.GetShader(
-        SDEstimator.gl,
-        SDEstimator.gl.FRAGMENT_SHADER,
-        SDEstimator.fragment_glsl));
+DensityEstimator.gl.attachShader(
+    DensityEstimator.program,
+    DensityEstimator.GetShader(
+        DensityEstimator.gl,
+        DensityEstimator.gl.FRAGMENT_SHADER,
+        DensityEstimator.fragment_glsl));
 
-SDEstimator.gl.linkProgram(SDEstimator.program);
+DensityEstimator.gl.linkProgram(DensityEstimator.program);
 // ---------------------------------------------------------------------------

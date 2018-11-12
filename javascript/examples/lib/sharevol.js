@@ -9123,10 +9123,10 @@ var vr_params = {
         -1.6454482671904334
       ],
       "rotate": [
-        0.5536984801292419,
-        0.1137750968337059,
-        -0.7585440278053284,
-        0.32404208183288574
+        1.,
+        0.,
+        0.,
+        0.
       ]
     }
   ],
@@ -9143,7 +9143,7 @@ var vr_params = {
         245.46299999999997,
         226.95000000000002
       ],
-      "density": 5,
+      "density": 25,
       "power": 1,
       "colourmap": 0,
       "tricubicfilter": false,
@@ -11125,21 +11125,21 @@ var shaders = {
         "//x-axis slice",
         "//slice offset coords from vCoord.x, inside coords from (slice,vCoord.y)",
         "z = clamp(vCoord.x, 0., 1.);",
-        "coord = vec2(clamp(slice.x, 0., 1.), clamp(vCoord.y, 0., 1.));",
+        "coord = vec2(clamp(slice.x, 0., 1.), 1. - clamp(vCoord.y, 0., 1.));",
       "}",
       "else if (axis==1)",
       "{",
         "//y-axis slice",
         "//slice offset coords from vCoord.y, inside coords from (vCoord.x,slice)",
         "z = clamp(vCoord.y, 0., 1.);",
-        "coord = vec2(clamp(vCoord.x, 0., 1.), clamp(slice.y, 0., 1.));",
+        "coord = vec2(clamp(vCoord.x, 0., 1.), 1. - clamp(slice.y, 0., 1.));",
       "}",
       "else if (axis==2)",
       "{",
         "//z-axis slice",
         "//slice offset coords from slice.z, inside coords unchanged (vCoord.xy)",
         "z = clamp(slice.z, 0., 1.);",
-        "coord = vec2(clamp(vCoord.x, 0., 1.), clamp(vCoord.y, 0., 1.));",
+        "coord = vec2(clamp(vCoord.x, 0., 1.), 1. - clamp(vCoord.y, 0., 1.));",
       "}",
 
       "z = min(z * float(res.z), float(res.z) - 1.);",
