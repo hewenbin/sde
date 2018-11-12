@@ -10260,7 +10260,7 @@ Volume.prototype.addGUI = function(gui) {
   f.add(this.properties, 'axes');
   f.add(this.properties, 'border');
   f.add(this.properties, 'tricubicFilter');
-  f.open();
+  //f.open();
   //this.gui.__folders.f.controllers[1].updateDisplay();  //Update samples display
 
   //Clip planes folder
@@ -10273,13 +10273,14 @@ Volume.prototype.addGUI = function(gui) {
   f0.add(this.properties, 'zmax', 0.0, 1.0, 0.01);//.onFinishChange(function(l) {if (slicer) slicer.setZ(l);});
   //f0.open();
 
-  //Isosurfaces folder
-  var f1 = this.gui.addFolder('Isosurface');
-  f1.add(this.properties, 'isovalue', 0.0, 1.0, 0.01);
-  f1.add(this.properties, 'isowalls');
-  f1.add(this.properties, 'isoalpha', 0.0, 1.0, 0.01);
-  f1.add(this.properties, 'isosmooth', 0.1, 3.0, 0.1);
-  f1.addColor(this.properties, 'colour');
+  // modified by wenbin --------------------------------------------------------
+  // //Isosurfaces folder
+  // var f1 = this.gui.addFolder('Isosurface');
+  // f1.add(this.properties, 'isovalue', 0.0, 1.0, 0.01);
+  // f1.add(this.properties, 'isowalls');
+  // f1.add(this.properties, 'isoalpha', 0.0, 1.0, 0.01);
+  // f1.add(this.properties, 'isosmooth', 0.1, 3.0, 0.1);
+  // f1.addColor(this.properties, 'colour');
   //f1.open();
 
   // Iterate over all controllers and set change function
@@ -10289,8 +10290,9 @@ Volume.prototype.addGUI = function(gui) {
     f.__controllers[i].onChange(changefn);
   for (var i in f0.__controllers)
     f0.__controllers[i].onChange(changefn);
-  for (var i in f1.__controllers)
-    f1.__controllers[i].onChange(changefn);
+  // for (var i in f1.__controllers)
+  //   f1.__controllers[i].onChange(changefn);
+  // ---------------------------------------------------------------------------
 }
 
 // modified by wenbin ----------------------------------------------------------
