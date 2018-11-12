@@ -3030,8 +3030,8 @@ DensityEstimator.fragment_glsl = [
       "bPrime = uHiSqrt * bx;",
       "cPrime = uHiSqrt * cx;",
 
-      "aabbMin = min((aPrime, bPrime), cPrime);",
-      "aabbMax = max((aPrime, bPrime), cPrime);",
+      "aabbMin = min(min(aPrime, bPrime), cPrime);",
+      "aabbMax = max(max(aPrime, bPrime), cPrime);",
 
       "if (all(lessThan((aabbMin - four3D) * (aabbMax + four3D), zero3D))) {",
         "float ct = TriangleArea(a, b, c) /",

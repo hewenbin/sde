@@ -9383,9 +9383,11 @@ function getData(compact, matrix) {
   return JSON.stringify(state, null, 2);
 }
 
-function exportData() {
-  window.open('data:text/json;base64,' + window.btoa(getData()));
-}
+// modified by wenbin ----------------------------------------------------------
+// function exportData() {
+//   window.open('data:text/json;base64,' + window.btoa(getData()));
+// }
+// -----------------------------------------------------------------------------
 
 function resetFromData(src) {
   //Restore data from saved props
@@ -9422,6 +9424,30 @@ function loadTexture() {
   );
 }
 
+// modified by wenbin ----------------------------------------------------------
+function updateTexture(url) {
+  var image;
+
+  loadImage(url, function () {
+    image = new Image();
+
+    var headers = request.getAllResponseHeaders();
+    var match = headers.match(/^Content-Type\:\s*(.*?)$/mi);
+    var mimeType = match[1] || "image/png";
+    var blob = new Blob([request.response], {type: mimeType});
+    image.src = window.URL.createObjectURL(blob);
+    var imageElement = document.createElement("img");
+
+    image.onload = function () {
+      slicer.updateImage(image);
+      slicer.draw();
+      volume.updateImage(image);
+      volume.draw();
+    }
+  });
+}
+// -----------------------------------------------------------------------------
+
 function imageLoaded(image) {
   //Create the slicer
   if (state.objects[0].slices) {
@@ -9456,14 +9482,14 @@ function imageLoaded(image) {
   volume.draw(false, true);*/
 
   if (!state.properties.nogui) {
-    var gui = new dat.GUI();
+    // var gui = new dat.GUI();
     // modified by wenbin ------------------------------------------------------
     // if (state.properties.server)
     //   gui.add({"Update" : function() {ajaxPost(state.properties.server + "/update", "data=" + encodeURIComponent(getData(true, true)));}}, 'Update');
     /* LOCALSTORAGE DISABLED
     gui.add({"Reset" : function() {resetFromData(reset);}}, 'Reset');*/
     //gui.add({"Restore" : function() {resetFromData(state);}}, 'Restore');
-    //gui.add({"Export" : function() {exportData();}}, 'Export');
+    gui.add({"Export" : function() {exportData();}}, 'Export');
     //gui.add({"loadFile" : function() {document.getElementById('fileupload').click();}}, 'loadFile'). name('Load Image file');
     gui.add({"ColourMaps" : function() {window.colourmaps.toggle();}}, 'ColourMaps');
     // -------------------------------------------------------------------------
