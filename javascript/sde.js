@@ -75,7 +75,9 @@ function SDEstimator(verts) {
   this.Compute = function(xmin, ymin, zmin,
                           xmax, ymax, zmax,  // Physical domain that density estimation is performed on.
                           xdim, ydim, zdim,  // Grid resolution of the physical domain.
-                          H) {  // bandwidth matrix
+                          H,  // bandwidth matrix
+                          normed=false,  // If true, normalize SDE by the area of the surface.
+                          red_only=false) {  // If true, only output the red channel.
     // Copy the parameters from CPU to GPU.
     var Hi = MatInv(H);  // inverse of the bandwidth matrix
     if (Hi === undefined) {
@@ -206,8 +208,16 @@ function SDEstimator(verts) {
     gl_.useProgram(null);
 
     // Normalize SDE by the area of the surface.
-    for (var i = 0, il = zdim * ydim * xdim * 4; i < il; i += 4)
-      res[i] /= this.area;
+    if (normed) {
+      for (var i = 0, il = zdim * ydim * xdim * 4; i < il; i += 4)
+        res[i] /= this.area;
+    }
+
+    if (red_only) {
+      res = res.filter(function(e, i, a) {
+              return i % 4 === 0;
+            });
+    }
 
     return res;
   };
@@ -2990,6 +3000,10 @@ SDEstimator.fragment_glsl = [
                  "// the area defined by each edge of a triangle.",
     "float bxc, cxa, axb;",
     "float h, a1, a2;",
+    "vec3 coss;",
+    "vec2 a2DNorm, b2DNorm, c2DNorm;",
+    "int cossMinId;",
+    "float res = 0.;",
     "for (int i = 0; i < uVertsTextureHeight; ++i) {",
       "// three vertices of the current triangle",
       "float currHeight = (float(i) + .5) / float(uVertsTextureHeight);",
@@ -3066,10 +3080,90 @@ SDEstimator.fragment_glsl = [
         "} else {",
           "alpha.z = dot(a2D, b2D) < 0. ? .5 : 0.;",
         "}",
+
+        "// Combine alpha bc, ca, and ab.",
+        "if (PointInTriangle(0., 0., a2D.x, a2D.y,",
+                            "b2D.x, b2D.y, c2D.x, c2D.y)) {",
+          "res += (1. - dot(alpha, vec3(1.))) * NormPdf(nd.w) * ct;",
+        "} else {",
+          "a2DNorm = normalize(a2D);",
+          "b2DNorm = normalize(b2D);",
+          "c2DNorm = normalize(c2D);",
+          "coss.x = dot(b2DNorm, c2DNorm);",
+          "coss.y = dot(c2DNorm, a2DNorm);",
+          "coss.z = dot(a2DNorm, b2DNorm);",
+
+          "cossMinId = coss.y < coss.x ? (coss.z < coss.y ? 2 : 1) :",
+                                        "(coss.z < coss.x ? 2 : 0);",
+
+          "res += abs(dot(alpha, vec3(1.)) - 2. * alpha[cossMinId])",
+                 "* NormPdf(nd.w) * ct;",
+        "}",
+      "}",
+
+      "// Handle spacial cases.",
+      "else if (all(equal(a2D, zero2D))) {",
+        "// segment bc",
+        "bc2D = c2D - b2D;",
+        "bxc = b2D.x * c2D.y - b2D.y * c2D.x;",
+        "if (bxc != 0.) {",
+          "h = bxc / length(bc2D);",
+          "a1 = dot(b2D, bc2D) / bxc;",
+          "a2 = dot(c2D, bc2D) / bxc;",
+          "alpha.x = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+        "} else {",
+          "alpha.x = dot(b2D, c2D) < 0. ? .5 : 0.;",
+        "}",
+
+        "b2DNorm = normalize(b2D);",
+        "c2DNorm = normalize(c2D);",
+
+        "res += (acos(dot(b2DNorm, c2DNorm)) /",
+                "kPi * .5 - alpha.x) * NormPdf(nd.w) * ct;",
+      "}",
+
+      "else if (all(equal(b2D, zero2D))) {",
+        "// segment ca",
+        "ca2D = a2D - c2D;",
+        "cxa = c2D.x * a2D.y - c2D.y * a2D.x;",
+        "if (cxa != 0.) {",
+          "h = cxa / length(ca2D);",
+          "a1 = dot(c2D, ca2D) / cxa;",
+          "a2 = dot(a2D, ca2D) / cxa;",
+          "alpha.y = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+        "} else {",
+          "alpha.y = dot(c2D, a2D) < 0. ? .5 : 0.;",
+        "}",
+
+        "c2DNorm = normalize(c2D);",
+        "a2DNorm = normalize(a2D);",
+
+        "res += (acos(dot(c2DNorm, a2DNorm)) /",
+                "kPi * .5 - alpha.y) * NormPdf(nd.w) * ct;",
+      "}",
+
+      "else if (all(equal(c2D, zero2D))) {",
+        "// segment ab",
+        "ab2D = b2D - a2D;",
+        "axb = a2D.x * b2D.y - a2D.y * b2D.x;",
+        "if (axb != 0.) {",
+          "h = axb / length(ab2D);",
+          "a1 = dot(a2D, ab2D) / axb;",
+          "a2 = dot(b2D, ab2D) / axb;",
+          "alpha.z = abs(GammaSwitch(h, a1) - GammaSwitch(h, a2));",
+        "} else {",
+          "alpha.z = dot(a2D, b2D) < 0. ? .5 : 0.;",
+        "}",
+
+        "a2DNorm = normalize(a2D);",
+        "b2DNorm = normalize(b2D);",
+
+        "res += (acos(dot(a2DNorm, b2DNorm)) /",
+                "kPi * .5 - alpha.x) * NormPdf(nd.w) * ct;",
       "}",
     "}",
 
-    "fragColor = vec4(Gamma(vUv.x * 4.76, vUv.y), 0., 0., 1.);",
+    "fragColor = vec4(res, 0., 0., 1.);",
   "}"
 ].join("\n");
 
