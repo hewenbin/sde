@@ -25,12 +25,15 @@ function SDEstimator(verts) {
     // Only keep triangles whose areas are greater than zero.
     var valid_verts = [];
     if (verts !== undefined) {
-      for (var i = 0, il = verts.length; i < il; i += 3) {
-        var area = TriangleArea(verts[i], verts[i + 1], verts[i + 2]);
+      for (var i = 0, il = verts.length; i < il; i += 9) {
+        var a = verts.slice(i,     i + 3),
+            b = verts.slice(i + 3, i + 6),
+            c = verts.slice(i + 6, i + 9);
+        var area = TriangleArea(a, b, c);
         if (area > 0.) {
-          valid_verts.push(verts[i].slice());
-          valid_verts.push(verts[i + 1].slice());
-          valid_verts.push(verts[i + 2].slice());
+          valid_verts.push(a);
+          valid_verts.push(b);
+          valid_verts.push(c);
           this.area += area;
         }
       }
