@@ -9118,15 +9118,15 @@ var vr_params = {
       "axes": false,
       "border": true,
       "translate": [
-        -0.05715767664977255,
-        -0.031176914536239782,
-        -1.6454482671904334
+        0.,
+        0.,
+        -2.
       ],
       "rotate": [
-        1.,
-        0.,
-        0.,
-        0.
+        .099,
+        .892,
+        .239,
+        .370
       ]
     }
   ],
@@ -9146,7 +9146,7 @@ var vr_params = {
       "density": 25,
       "power": 1,
       "colourmap": 0,
-      "tricubicfilter": false,
+      "tricubicfilter": true,
       "zmin": 0,
       "zmax": 1,
       "ymin": 0,
@@ -9489,7 +9489,7 @@ function imageLoaded(image) {
     /* LOCALSTORAGE DISABLED
     gui.add({"Reset" : function() {resetFromData(reset);}}, 'Reset');*/
     //gui.add({"Restore" : function() {resetFromData(state);}}, 'Restore');
-    gui.add({"Export" : function() {exportData();}}, 'Export');
+    //gui.add({"Export" : function() {exportData();}}, 'Export');
     //gui.add({"loadFile" : function() {document.getElementById('fileupload').click();}}, 'loadFile'). name('Load Image file');
     gui.add({"ColourMaps" : function() {window.colourmaps.toggle();}}, 'ColourMaps');
     // -------------------------------------------------------------------------

@@ -14,6 +14,27 @@
         height: 100%;
       }
 
+      #overlay {
+        background-color: rgba(0, 0, 0, 0.2);
+        z-index: 999;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        display: none;
+      }
+
+      #computing {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        margin-top: -50px;
+        margin-left: -50px;
+        width: 100px;
+        height: 100px;
+      }​
+
       .palette {
         z-index: 0; margin: 0; padding:0;
         border:1px solid #000;
@@ -37,6 +58,11 @@
         min-width: 300px;
         max-height: 400px;
       }
+
+      #info {
+        display: none;
+      }
+
       .scroll {
         overflow-y: auto;
         max-height: 330px;
@@ -54,6 +80,10 @@
   </head>
 
   <body onload="main();">
+    <div id="overlay">
+      <h3 id="computing">Computing...</h3>
+    </div>
+
     <div id="hidden" style="display: none">
       <canvas id="gradient" width="2048" height="1"></canvas>
     </div>
@@ -83,44 +113,55 @@
       </div>
     </div></div>
 
+    <script src="https://fastcdn.org/FileSaver.js/1.1.20151003/FileSaver.min.js"></script>
     <script src="lib/sharevol.js"></script>
     <script src="../sde.js"></script>
 
     <script>
-      // main function
-      function main() {
-        // input surfaces
-        var verts = [[-.8, -.3,  .2],
-                     [ .7, -.9,  .4],
-                     [ .1,  .8, -.2]];
+      // Update SDE based on the input surfaces and parameters.
+      function updateSDE(canvas, ctx, estimator, surfaces, params, sde) {
+        function process_() {
+          estimator.SetSurfaces(surfaces[params.surfaces]);
+          // update the bandwidth matrix
+          var sigma2 = params.sigma * params.sigma;
+          var H = [[sigma2, 0.,     0.],
+                   [0.,     sigma2, 0.],
+                   [0.,     0.,     sigma2]];
 
-        // parameters
-        var xmin = -1., ymin = -1., zmin = -1.,
-            xmax = 1., ymax = 1., zmax = 1.;  // Physical domain that density estimation is performed on.
-        var xdim = 64, ydim = 64, zdim = 64;  // Grid resolution of the physical domain.
+          sde = estimator.Compute(params.xmin, params.ymin, params.zmin,
+                                  params.xmax, params.ymax, params.zmax,
+                                  params.xdim, params.ydim, params.zdim,
+                                  H);
 
-        var H = [[.0025,  0.,     0.   ],
-                 [0.,     .0025,  0.   ],
-                 [0.,     0.,     .0025]];  // bandwidth matrix
+          var url = SDEToImg(
+              canvas, ctx, params.xdim, params.ydim, params.zdim, sde);
+          updateTexture(url);
 
-        // SDE computation -----------------------------------------------------
-        var sdestimator = new SDEstimator(verts);
+          document.getElementById("overlay").style.display = "none";
+        }
 
-        var sde = sdestimator.Compute(xmin, ymin, zmin,
-                                      xmax, ymax, zmax,
-                                      xdim, ydim, zdim,
-                                      H);
-        // ---------------------------------------------------------------------
+        return function() {
+          document.getElementById("overlay").style.display = "block";
 
-        // SDE visualization ---------------------------------------------------
-        // Create an image based on the density estimation result.
-        var canvas = document.createElement("canvas"),
-            ctx = canvas.getContext("2d");
+          if (surfaces[params.surfaces] !== undefined) {
+            setTimeout(function() { process_(); }, 500);
+          } else {
+            var xhttp = new XMLHttpRequest();
+            xhttp.overrideMimeType("application/json");
+            xhttp.open("GET", "geometries/" + params.surfaces + ".json", true);
+            xhttp.onreadystatechange = function () {
+              if (xhttp.readyState == 4 && xhttp.status == "200") {
+                surfaces[params.surfaces] = JSON.parse(xhttp.responseText);
+                setTimeout(function() { process_(); }, 500);
+              }
+            };
+            xhttp.send();
+          }
+        }
+      }
 
-        // Set zdim = 64 = 8 x 8 for the time being.
-        canvas.width = xdim * 8;
-        canvas.height = ydim * 8;
-
+      // Create an image based on the density estimation result for volume rendering.
+      function SDEToImg(canvas, ctx, xdim, ydim, zdim, sde) {
         var tmp = 0.;
         for (var i = 0, il = zdim * ydim * xdim * 4; i < il; i += 4) {
           if (sde[i] > tmp) tmp = sde[i];
@@ -131,28 +172,79 @@
           sde[i] /= tmp; sde[i + 3] = 255;
         }
 
+        var zsqrt = Math.floor(Math.sqrt(zdim));
         for (var i = 0; i < zdim; ++i) {
           var idata = ctx.createImageData(xdim, ydim);
           idata.data.set(sde.slice(i * ydim * xdim * 4,
                                    (i + 1) * ydim * xdim * 4));
-          ctx.putImageData(idata, i % 8 * xdim, Math.floor(i / 8) * ydim);
+          ctx.putImageData(idata, i % zsqrt * xdim, Math.floor(i / zsqrt) * ydim);
         }
 
-        var dataurl = canvas.toDataURL("image/png");
+        return canvas.toDataURL("image/png");
+      }
 
-        // Render the image using customized sharevol.
-        vr_params.objects[0].volume.url = dataurl;
-        vr_params.objects[0].volume.res[0] = xdim;
-        vr_params.objects[0].volume.res[1] = ydim;
-        vr_params.objects[0].volume.res[2] = zdim;
+      function exportData(sde) {
+        var blob = new Blob([JSON.stringify(Array.from(sde))],
+                            {type: "application/json"});
+        saveAs(blob, "sde.json");
+      }
 
-        vr_params.objects[0].slices.properties.X = Math.round(xdim / 2);
-        vr_params.objects[0].slices.properties.Y = Math.round(ydim / 2);
-        vr_params.objects[0].slices.properties.Z = Math.round(zdim / 2);
+      // main function
+      function main() {
+        // surface density estimator
+        var estimator = new DensityEstimator();
 
-        // document.body.appendChild(canvas);
+        // input surfaces
+        var surfaces = {
+          "triangle": [-8.,-3.,2.,7.,-9.,4.,1.,8.,-2.]
+        };
+
+        // parameters
+        var params = {
+          "surfaces": "dolphins",
+          "sigma": 0.2,
+          "xmin": -10., "ymin": -10., "zmin": -10.,
+          "xmax": 10., "ymax": 10., "zmax": 10.,  // Physical domain that density estimation is performed on.
+          "xdim": 64, "ydim": 64, "zdim": 64  // Grid resolution of the physical domain.
+        };
+        var zsqrt = Math.floor(Math.sqrt(params.zdim));  // zdim must be a square number for the WebGL volume renderer based on sharevol
+
+        // reference to density estimation results
+        var sde = new Float32Array(params.zdim * params.ydim * params.xdim * 4);
+        sde.fill(0.);
+
+        // visualization related
+        var canvas = document.createElement("canvas"),
+            ctx = canvas.getContext("2d");
+
+        canvas.width = params.xdim * zsqrt;
+        canvas.height = params.ydim * zsqrt;
+
+        gui = new dat.GUI();
+
+        var cntlr0 = gui.add(params, "surfaces", ["triangle", "spheres", "teapot", "dolphins", "lucy100k"]);
+        var cntlr1 = gui.add(params, "sigma", 0.2, 1.);
+
+        cntlr0.onFinishChange(updateSDE(canvas, ctx, estimator, surfaces, params, sde));
+        cntlr1.onFinishChange(updateSDE(canvas, ctx, estimator, surfaces, params, sde));
+
+        gui.add({"Export": function() { exportData(sde); }}, "Export");
+
+        // init sharevol
+        vr_params.objects[0].volume.url =
+            SDEToImg(canvas, ctx, params.xdim, params.ydim, params.zdim, sde);
+        vr_params.objects[0].volume.res[0] = params.xdim;
+        vr_params.objects[0].volume.res[1] = params.ydim;
+        vr_params.objects[0].volume.res[2] = params.zdim;
+
+        vr_params.objects[0].slices.properties.X = Math.round(params.xdim / 2);
+        vr_params.objects[0].slices.properties.Y = Math.round(params.ydim / 2);
+        vr_params.objects[0].slices.properties.Z = Math.round(params.zdim / 2);
+
         initPage();
-        // ---------------------------------------------------------------------
+
+        // init SDE
+        updateSDE(canvas, ctx, estimator, surfaces, params, sde)();
       }
     </script>
   </body>
