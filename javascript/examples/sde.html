@@ -131,7 +131,7 @@
           sde = estimator.Compute(params.xmin, params.ymin, params.zmin,
                                   params.xmax, params.ymax, params.zmax,
                                   params.xdim, params.ydim, params.zdim,
-                                  H);
+                                  H, false, true);
 
           var url = SDEToImg(
               canvas, ctx, params.xdim, params.ydim, params.zdim, sde);

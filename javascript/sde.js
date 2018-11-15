@@ -80,7 +80,7 @@ function DensityEstimator(verts) {
                           xdim, ydim, zdim,  // Grid resolution of the physical domain.
                           H,  // bandwidth matrix
                           normed=false,  // If true, normalize SDE by the area of the surface.
-                          red_only=false) {  // If true, only output the red channel.
+                          red_only=true) {  // If true, only output the red channel.
     console.time("SDE computation time");
     // Copy the parameters from CPU to GPU.
     var Hi = MatInv(H);  // inverse of the bandwidth matrix
