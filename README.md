@@ -27,9 +27,13 @@ var surfaces = [-8., -3., 2.,    // first vertex
                 1.,  8.,  -2.];  // ...
 
 // parameters
-var xmin = -10., ymin = -10., zmin = -10.,
-    xmax =  10., ymax =  10., zmax =  10.;  // Physical domain that density estimation is performed on.
-var xdim = 64, ydim = 64, zdim = 64;  // Grid resolution of the physical domain.
+var xmin = -10., ymin = -10., zmin = -10.,  // Physical domain that
+    xmax =  10., ymax =  10., zmax =  10.;  // density estimation is
+                                            // performed on.
+
+var xdim = 64, ydim = 64, zdim = 64;  // Grid resolution of
+                                      // the physical domain.
+
 var H = [[.01, 0.,  0.],
          [0.,  .01, 0.],
          [0.,  0.,  .01]];  // bandwidth matrix
