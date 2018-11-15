@@ -10,7 +10,7 @@ The core functionalities (e.g., SDE computation) of this project are self-contai
 
 ### Usage
 
-###### WebGL and JavaScript
+##### WebGL and JavaScript
 
 Download [sde.js](https://raw.githubusercontent.com/hewenbin/sde/master/javascript/sde.js) and include it in your HTML.
 
@@ -46,7 +46,7 @@ var sde = estimator.Compute(xmin, ymin, zmin,
 
 If everything went well, you should get an array of densities for the positions of interest.
 
-###### OpenGL and C/C++
+##### OpenGL and C/C++
 
 Under development.
 
