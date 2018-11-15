@@ -1,37 +1,7 @@
-# sde
+Surface density estimate (SDE) [1] extends kernel density estimate (KDE) from discrete data points to surfaces (i.e., polygon meshes),  which is used to model the positional uncertainty of input surfaces. This library provides OpenGL and WebGL based parallel implementations on computing SDE for a set of input surfaces.
 
-You can use the [editor on GitHub](https://github.com/hewenbin/sde/edit/gh-pages/README.md) to maintain and preview the content for your website in Markdown files.
+[A WebGL based live demo](https://hewenbin.github.io/sde/javascript/examples/sde.html)
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+### References
 
-### Markdown
-
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/hewenbin/sde/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+[1]: Wenbin He, Hanqi Guo, Han-Wei Shen, and Tom Peterka, "eFESTA: Ensemble Feature Exploration with Surface Density Estimates", IEEE Transactions on Visualization and Computer Graphics.
