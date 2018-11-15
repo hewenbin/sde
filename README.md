@@ -10,7 +10,7 @@ The core functionalities (e.g., SDE computation) of this project are self-contai
 
 ### Usage
 
-##### WebGL and JavaScript
+###### WebGL and JavaScript
 
 Download [sde.js](https://raw.githubusercontent.com/hewenbin/sde/master/javascript/sde.js) and include it in your HTML.
 
@@ -18,7 +18,35 @@ Download [sde.js](https://raw.githubusercontent.com/hewenbin/sde/master/javascri
 <script src="lib/sde.js"></script>
 ```
 
-##### OpenGL and C/C++
+The following code computes the SDE of a triangle with respect to the input parameters (e.g., bandwidth matrix).
+
+```javascript
+// input surfaces
+var surfaces = [-8., -3., 2.,    // first vertex
+                7.,  -9., 4.,    // second vertex
+                1.,  8.,  -2.];  // ...
+
+// parameters
+var xmin = -10., ymin = -10., zmin = -10.,
+    xmax =  10., ymax =  10., zmax =  10.;  // Physical domain that density estimation is performed on.
+var xdim = 64, ydim = 64, zdim = 64;  // Grid resolution of the physical domain.
+var H = [[.01, 0.,  0.],
+         [0.,  .01, 0.],
+         [0.,  0.,  .01]];  // bandwidth matrix
+
+// surface density estimator
+var estimator = new DensityEstimator(surfaces);
+
+// SDE computation
+var sde = estimator.Compute(xmin, ymin, zmin,
+                            xmax, ymax, zmax,
+                            xdim, ydim, zdim,
+                            H);
+```
+
+If everything went well, you should get an array of densities for the positions of interest.
+
+###### OpenGL and C/C++
 
 Under development.
 
