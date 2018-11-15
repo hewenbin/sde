@@ -10,8 +10,20 @@ The core functionalities (e.g., SDE computation) of this project are self-contai
 
 ### Usage
 
+##### WebGL and JavaScript
+
+Download [sde.js](https://raw.githubusercontent.com/hewenbin/sde/master/javascript/sde.js) and include it in your HTML.
+
+```html
+<script src="lib/sde.js"></script>
+```
+
+##### OpenGL and C/C++
+
+Under development.
+
 ### References
 
-[1]: Wenbin He, Hanqi Guo, Han-Wei Shen, and Tom Peterka, "eFESTA: Ensemble Feature Exploration with Surface Density Estimates", IEEE Transactions on Visualization and Computer Graphics.
+[1] Wenbin He, Hanqi Guo, Han-Wei Shen, and Tom Peterka, "eFESTA: Ensemble Feature Exploration with Surface Density Estimates", IEEE Transactions on Visualization and Computer Graphics.
 
-[2]: Kernel density estimation. https://en.wikipedia.org/wiki/Kernel_density_estimation.
+[2] Kernel density estimation. https://en.wikipedia.org/wiki/Kernel_density_estimation.
